@@ -20,19 +20,11 @@ void copy_real(
 double* allocate_real(const int n0, const int n1);
 
 fftw_plan plan_ifftw(
-    const int n0, const int n1, fftw_complex* in, const planner_flags wisdom);
-
-fftw_complex* allocate_plan_copy(
     const int n0,
     const int n1,
-    fftw_plan& p,
-    std::vector<std::complex<double>> complex_vector);
-
-double* allocate_plan_copy(
-    const int n0,
-    const int n1,
-    std::vector<fftw_plan>& p_vector,
-    std::vector<double> real_vector);
+    fftw_complex* in,
+    double* out,
+    const planner_flags wisdom);
 
 fftw_complex* allocate_copy(
     const int n0,
@@ -44,6 +36,7 @@ void plan_ifftw_nwt(
     const int n1,
     std::vector<fftw_plan>& plan_vector,
     double* in,
+    double* out,
     const planner_flags wisdom);
 
 template <typename VT, typename PT>

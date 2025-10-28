@@ -48,6 +48,7 @@ fftw_plan modes_hosgrid::plan_ifftw(
     const int n0,
     const int n1,
     fftw_complex* in,
+    double* out,
     const planner_flags wisdom = planner_flags::patient)
 {
     unsigned int flag;
@@ -70,10 +71,8 @@ fftw_plan modes_hosgrid::plan_ifftw(
                "invalid or unsupported.\n";
         std::exit(1);
     }
-    // Output array is used for planning (except for FFTW_ESTIMATE)
-    double out[n0][n1];
     // Make and return plan
-    return fftw_plan_dft_c2r_2d(n0, n1, in, &out[0][0], flag);
+    return fftw_plan_dft_c2r_2d(n0, n1, in, &out[0], flag);
 }
 
 void modes_hosgrid::plan_ifftw_nwt(
@@ -81,6 +80,7 @@ void modes_hosgrid::plan_ifftw_nwt(
     const int n1,
     std::vector<fftw_plan>& plan_vector,
     double* in,
+    double* out,
     const planner_flags wisdom = planner_flags::patient)
 {
     unsigned int flag;
@@ -104,7 +104,6 @@ void modes_hosgrid::plan_ifftw_nwt(
         std::exit(1);
     }
     // Output array is used for planning (except for FFTW_ESTIMATE)
-    double out[n0 * n1];
     if (n0 == 1) {
         // CC
         plan_vector.emplace_back(
@@ -135,36 +134,6 @@ void modes_hosgrid::plan_ifftw_nwt(
     }
 }
 
-fftw_complex* modes_hosgrid::allocate_plan_copy(
-    const int n0,
-    const int n1,
-    fftw_plan& p,
-    std::vector<std::complex<double>> complex_vector)
-{
-    // Allocate and get pointer
-    auto a_ptr = allocate_complex(n0, n1);
-    // Create plan before data is initialized
-    p = plan_ifftw(n0, n1, a_ptr);
-    // Copy mode data from input vector
-    copy_complex(n0, n1, complex_vector, a_ptr);
-    // Return pointer to fftw_complex data
-    return a_ptr;
-}
-
-double* modes_hosgrid::allocate_plan_copy(
-    const int n0,
-    const int n1,
-    std::vector<fftw_plan>& p_vector,
-    std::vector<double> real_vector)
-{
-    // n0 is outer dimension, n1 is inner dimension
-    // assuming data comes from fortran, that means n0 is y, n1 is x
-    auto a_ptr = allocate_real(n0, n1);
-    plan_ifftw_nwt(n0, n1, p_vector, a_ptr);
-    copy_real(n0, n1, real_vector, a_ptr);
-    return a_ptr;
-}
-
 fftw_complex* modes_hosgrid::allocate_copy(
     const int n0,
     const int n1,
@@ -186,8 +155,7 @@ void modes_hosgrid::populate_hos_eta(
     fftw_complex* eta_modes,
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
-
-    // Assert p_vector.size() == 1 !!
+    AMREX_ALWAYS_ASSERT(p_vector.size() == 1);
 
     // Get nondimensional interface height (eta)
     populate_hos_ocean_eta_nondim(n0, n1, p_vector[0], eta_modes, HOS_eta);
@@ -204,14 +172,13 @@ void modes_hosgrid::populate_hos_ocean_eta_nondim(
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
     // Local array for output data
-    double out[n0 * n1];
+    std::vector<double> out(n0 * n1);
     // Perform complex-to-real (inverse) FFT
-    do_ifftw(n0, n1, p, eta_modes, &out[0]);
+    do_ifftw(n0, n1, p, eta_modes, out.data());
 
     // Copy data to output vector
     amrex::Gpu::copy(
-        amrex::Gpu::hostToDevice, &out[0], &out[0] + HOS_eta.size(),
-        HOS_eta.begin());
+        amrex::Gpu::hostToDevice, out.begin(), out.end(), HOS_eta.begin());
 
     // !! -- This function MODIFIES the modes -- !! //
     //   .. they are not intended to be reused ..   //
@@ -226,7 +193,7 @@ void modes_hosgrid::populate_hos_eta(
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
 
-    // Assert p_vector.size() > 1 !!
+    AMREX_ALWAYS_ASSERT(p_vector.size() > 1);
 
     // Get nondimensional interface height (eta)
     populate_hos_nwt_eta_nondim(n0, n1, p_vector, eta_modes, HOS_eta);
@@ -243,16 +210,18 @@ void modes_hosgrid::populate_hos_nwt_eta_nondim(
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
     // Local array for output data
-    double out[n0 * n1];
-    double f_work[n0 * n1];
-    double sp_work[n0 * n1];
+    std::vector<double> out(n0 * n1);
+    std::vector<double> f_work(n0 * n1);
+    std::vector<double> sp_work(n0 * n1);
+
     // Perform complex-to-real (inverse) FFT (cos, cos)
-    do_ifftw(n0, n1, true, true, p_vector, eta_modes, &out[0], f_work, sp_work);
+    do_ifftw(
+        n0, n1, true, true, p_vector, eta_modes, out.data(), f_work.data(),
+        sp_work.data());
 
     // Copy data to output vector
     amrex::Gpu::copy(
-        amrex::Gpu::hostToDevice, &out[0], &out[0] + HOS_eta.size(),
-        HOS_eta.begin());
+        amrex::Gpu::hostToDevice, out.begin(), out.end(), HOS_eta.begin());
 
     // !! -- This function MODIFIES the modes -- !! //
     //   .. they are not intended to be reused ..   //
@@ -299,7 +268,7 @@ void modes_hosgrid::populate_hos_vel(
     const amrex::Real nd_depth = depth / dimL;
     const amrex::Real nd_z = (z - zsl) / dimL;
 
-    // Assert that p_vector.size() == 1 !!
+    AMREX_ALWAYS_ASSERT(p_vector.size() == 1);
 
     // Get nondimensional velocities
     populate_hos_ocean_vel_nondim(
@@ -447,7 +416,7 @@ void modes_hosgrid::populate_hos_vel(
     const amrex::Real nd_ylen = ylen / dimL;
     const amrex::Real nd_z = (z - zsl) / dimL;
 
-    // Assert that p_vector.size() > 1 !!
+    AMREX_ALWAYS_ASSERT(p_vector.size() > 1);
 
     // Output vectors
     const int xy_size = n0 * n1;

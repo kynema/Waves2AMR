@@ -1,0 +1,26 @@
+name: Waves2AMR-CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{github.ref}}-${{github.head_ref}}-ci
+  cancel-in-progress: true
+
+jobs:
+  Formatting:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Clone
+      uses: actions/checkout@v4
+    - name: Check formatting
+      uses: DoozyX/clang-format-lint-action@v0.20
+      with:
+        source: './include ./src'
+        exclude: '.'
+        extensions: 'H,h,cpp,tpp'
+        clangFormatVersion: 20
