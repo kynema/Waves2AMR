@@ -5,7 +5,7 @@
 void modes_hosgrid::copy_complex(
     const int n0,
     const int n1,
-    std::vector<std::complex<double>> complex_vector,
+    const std::vector<std::complex<double>>& complex_vector,
     fftw_complex* ptr)
 {
     for (int i = 0; i < n0; ++i) {
@@ -26,7 +26,10 @@ fftw_complex* modes_hosgrid::allocate_complex(const int n0, const int n1)
 }
 
 void modes_hosgrid::copy_real(
-    const int n0, const int n1, std::vector<double> real_vector, double* ptr)
+    const int n0,
+    const int n1,
+    const std::vector<double>& real_vector,
+    double* ptr)
 {
     for (int i = 0; i < n0; ++i) {
         for (int j = 0; j < n1; ++j) {
@@ -137,7 +140,7 @@ void modes_hosgrid::plan_ifftw_nwt(
 fftw_complex* modes_hosgrid::allocate_copy(
     const int n0,
     const int n1,
-    std::vector<std::complex<double>> complex_vector)
+    const std::vector<std::complex<double>>& complex_vector)
 {
     // Allocate and get pointer
     auto a_ptr = allocate_complex(n0, n1);
@@ -151,7 +154,7 @@ void modes_hosgrid::populate_hos_eta(
     const int n0,
     const int n1,
     const double dimL,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<fftw_plan>& p_vector,
     fftw_complex* eta_modes,
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
@@ -188,7 +191,7 @@ void modes_hosgrid::populate_hos_eta(
     const int n0,
     const int n1,
     const double dimL,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<fftw_plan>& p_vector,
     double* eta_modes,
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
@@ -205,7 +208,7 @@ void modes_hosgrid::populate_hos_eta(
 void modes_hosgrid::populate_hos_nwt_eta_nondim(
     const int n0,
     const int n1,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<fftw_plan>& p_vector,
     double* eta_modes,
     amrex::Gpu::DeviceVector<amrex::Real>& HOS_eta)
 {
@@ -252,7 +255,7 @@ void modes_hosgrid::populate_hos_vel(
     std::vector<std::complex<double>> mX_vector,
     std::vector<std::complex<double>> mY_vector,
     std::vector<std::complex<double>> mZ_vector,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<fftw_plan>& p_vector,
     fftw_complex* x_modes,
     fftw_complex* y_modes,
     fftw_complex* z_modes,
@@ -394,11 +397,11 @@ void modes_hosgrid::populate_hos_vel(
     double zsl,
     const double dimL,
     const double dimT,
-    std::vector<double> mX_vector,
-    std::vector<double> mY_vector,
-    std::vector<double> mZ_vector,
-    std::vector<double> mAdd_vector,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<double>& mX_vector,
+    const std::vector<double>& mY_vector,
+    const std::vector<double>& mZ_vector,
+    const std::vector<double>& mAdd_vector,
+    const std::vector<fftw_plan>& p_vector,
     double* x_modes,
     double* y_modes,
     double* z_modes,
@@ -450,10 +453,10 @@ void modes_hosgrid::populate_hos_nwt_vel_nondim(
     const double nd_xlen,
     const double nd_ylen,
     const double nd_z,
-    std::vector<double> mX_vector,
-    std::vector<double> mY_vector,
-    std::vector<double> mZ_vector,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<double>& mX_vector,
+    const std::vector<double>& mY_vector,
+    const std::vector<double>& mZ_vector,
+    const std::vector<fftw_plan>& p_vector,
     double* x_modes,
     double* y_modes,
     double* z_modes,
@@ -559,8 +562,8 @@ void modes_hosgrid::populate_additional_hos_nwt_vel_nondim(
     const double nd_xlen,
     const double nd_ylen,
     const double nd_z,
-    std::vector<double> add_modes_vec,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<double>& add_modes_vec,
+    const std::vector<fftw_plan>& p_vector,
     double* x_modes,
     double* y_modes,
     double* z_modes,
@@ -754,7 +757,7 @@ void modes_hosgrid::do_ifftw(
     const int n1,
     const bool cos_y,
     const bool cos_x,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<fftw_plan>& p_vector,
     double* f_in,
     double* sp_out,
     double* f_work,
@@ -846,7 +849,7 @@ void modes_hosgrid::do_ifftw(
 void modes_hosgrid::do_ifftw(
     const int n0,
     const bool cos_y,
-    std::vector<fftw_plan> p_vector,
+    const std::vector<fftw_plan>& p_vector,
     double* f_in,
     double* sp_out,
     double* f_work,

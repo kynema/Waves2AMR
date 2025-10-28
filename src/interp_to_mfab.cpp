@@ -97,9 +97,9 @@ int interp_to_mfab::create_height_vector(
 // current process
 int interp_to_mfab::get_local_height_indices(
     amrex::Vector<int>& indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::Geometry> geom)
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::Geometry>& geom)
 {
 
     // Bounds of local AMR mesh
@@ -122,10 +122,11 @@ int interp_to_mfab::get_local_height_indices(
 // current process
 int interp_to_mfab::get_local_height_indices(
     amrex::Vector<int>& indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> problo_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> dx_vec)
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        problo_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
 {
 
     // Bounds of local AMR mesh
@@ -147,10 +148,10 @@ int interp_to_mfab::get_local_height_indices(
 // current process
 int interp_to_mfab::get_local_height_indices(
     amrex::Vector<int>& indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::MultiFab& mfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::MultiFab& mfab,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
 
     // Bounds of local AMR mesh
@@ -165,9 +166,9 @@ int interp_to_mfab::get_local_height_indices(
 
 // !! -- This assumes cell-centered locations are what matters -- !! //
 void interp_to_mfab::get_mfab_mesh_bounds(
-    amrex::MultiFab& mfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx,
+    const amrex::MultiFab& mfab,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
     amrex::Real& mesh_zlo,
     amrex::Real& mesh_zhi,
     int idim)
@@ -185,9 +186,9 @@ void interp_to_mfab::get_mfab_mesh_bounds(
 
 int interp_to_mfab::local_height_vec_ops(
     amrex::Vector<int>& indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Real& mesh_zlo,
-    amrex::Real& mesh_zhi)
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Real& mesh_zlo,
+    const amrex::Real& mesh_zhi)
 {
     // Loop through height vector and get first and last indices
     int itop = -1;           // top index is lowest ind, highest height
@@ -236,8 +237,8 @@ int interp_to_mfab::local_height_vec_ops(
 int interp_to_mfab::check_lateral_overlap(
     amrex::Real dist,
     int idim,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::Geometry> geom,
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::Geometry>& geom,
     bool is_hi)
 {
 
@@ -279,8 +280,8 @@ int interp_to_mfab::check_lateral_overlap(
 int interp_to_mfab::check_lateral_overlap_lo(
     amrex::Real dist,
     int idim,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::Geometry> geom)
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::Geometry>& geom)
 {
     return check_lateral_overlap(dist, idim, field_fabs, geom, false);
 }
@@ -288,8 +289,8 @@ int interp_to_mfab::check_lateral_overlap_lo(
 int interp_to_mfab::check_lateral_overlap_hi(
     amrex::Real dist,
     int idim,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::Geometry> geom)
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::Geometry>& geom)
 {
     return check_lateral_overlap(dist, idim, field_fabs, geom, true);
 }
@@ -297,10 +298,12 @@ int interp_to_mfab::check_lateral_overlap_hi(
 int interp_to_mfab::check_lateral_overlap(
     amrex::Real dist,
     int idim,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> problo_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> probhi_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> dx_vec,
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        problo_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        probhi_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec,
     bool is_hi)
 {
 
@@ -342,10 +345,12 @@ int interp_to_mfab::check_lateral_overlap(
 int interp_to_mfab::check_lateral_overlap_lo(
     amrex::Real dist,
     int idim,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> problo_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> probhi_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> dx_vec)
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        problo_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        probhi_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
 {
     return check_lateral_overlap(
         dist, idim, field_fabs, problo_vec, probhi_vec, dx_vec, false);
@@ -354,10 +359,12 @@ int interp_to_mfab::check_lateral_overlap_lo(
 int interp_to_mfab::check_lateral_overlap_hi(
     amrex::Real dist,
     int idim,
-    amrex::Vector<amrex::MultiFab*> field_fabs,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> problo_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> probhi_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> dx_vec)
+    const amrex::Vector<amrex::MultiFab*>& field_fabs,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        problo_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        probhi_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
 {
     return check_lateral_overlap(
         dist, idim, field_fabs, problo_vec, probhi_vec, dx_vec, true);
@@ -374,9 +381,9 @@ void interp_to_mfab::interp_eta_to_levelset_field(
     const amrex::Real spd_ylo,
     const amrex::Real zsl,
     const bool is_periodic,
-    amrex::Gpu::DeviceVector<amrex::Real> etavec,
-    amrex::Vector<amrex::MultiFab*> lsfield,
-    amrex::Vector<amrex::Geometry> geom)
+    const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
+    const amrex::Vector<amrex::MultiFab*>& lsfield,
+    const amrex::Vector<amrex::Geometry>& geom)
 {
 
     // Number of levels
@@ -405,10 +412,11 @@ void interp_to_mfab::interp_eta_to_levelset_field(
     const amrex::Real spd_ylo,
     const amrex::Real zsl,
     const bool is_periodic,
-    amrex::Gpu::DeviceVector<amrex::Real> etavec,
-    amrex::Vector<amrex::MultiFab*> lsfield,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> problo_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> dx_vec)
+    const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
+    const amrex::Vector<amrex::MultiFab*>& lsfield,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        problo_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
 {
 
     // Number of levels
@@ -435,13 +443,13 @@ void interp_to_mfab::interp_velocity_to_field(
     const amrex::Real spd_xlo,
     const amrex::Real spd_ylo,
     const bool is_periodic,
-    amrex::Vector<int> indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Gpu::DeviceVector<amrex::Real> uvec,
-    amrex::Gpu::DeviceVector<amrex::Real> vvec,
-    amrex::Gpu::DeviceVector<amrex::Real> wvec,
-    amrex::Vector<amrex::MultiFab*> vfield,
-    amrex::Vector<amrex::Geometry> geom)
+    const amrex::Vector<int>& indvec,
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& uvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& vvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
+    const amrex::Vector<amrex::MultiFab*>& vfield,
+    const amrex::Vector<amrex::Geometry>& geom)
 {
 
     // Number of levels
@@ -485,14 +493,15 @@ void interp_to_mfab::interp_velocity_to_field(
     const amrex::Real spd_xlo,
     const amrex::Real spd_ylo,
     const bool is_periodic,
-    amrex::Vector<int> indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Gpu::DeviceVector<amrex::Real> uvec,
-    amrex::Gpu::DeviceVector<amrex::Real> vvec,
-    amrex::Gpu::DeviceVector<amrex::Real> wvec,
-    amrex::Vector<amrex::MultiFab*> vfield,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> problo_vec,
-    amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>> dx_vec)
+    const amrex::Vector<int>& indvec,
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& uvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& vvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
+    const amrex::Vector<amrex::MultiFab*>& vfield,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
+        problo_vec,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
 {
 
     // Number of levels
@@ -537,10 +546,10 @@ void interp_to_mfab::interp_eta_to_levelset_multifab(
     const amrex::Real spd_ylo,
     const amrex::Real zsl,
     const bool is_periodic,
-    amrex::Gpu::DeviceVector<amrex::Real> etavec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
 
     if (spd_ny == 1) {
@@ -563,14 +572,14 @@ void interp_to_mfab::interp_velocity_to_multifab(
     const amrex::Real spd_xlo,
     const amrex::Real spd_ylo,
     const bool is_periodic,
-    amrex::Vector<int> indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Gpu::DeviceVector<amrex::Real> uvec,
-    amrex::Gpu::DeviceVector<amrex::Real> vvec,
-    amrex::Gpu::DeviceVector<amrex::Real> wvec,
+    const amrex::Vector<int>& indvec,
+    const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& uvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& vvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
 
     if (spd_ny == 1) {
@@ -594,10 +603,10 @@ void interp_to_mfab::interp_eta_to_levelset_multifab3D(
     const amrex::Real spd_ylo,
     const amrex::Real zsl,
     const bool is_periodic,
-    amrex::Gpu::DeviceVector<amrex::Real> etavec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
 
     // Get pointer to device vector
@@ -689,14 +698,14 @@ void interp_to_mfab::interp_velocity_to_multifab3D(
     const amrex::Real spd_xlo,
     const amrex::Real spd_ylo,
     const bool is_periodic,
-    amrex::Vector<int> indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Gpu::DeviceVector<amrex::Real> uvec,
-    amrex::Gpu::DeviceVector<amrex::Real> vvec,
-    amrex::Gpu::DeviceVector<amrex::Real> wvec,
+    const amrex::Vector<int>& indvec,
+    const const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& uvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& vvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
     // Number of heights relevant to this processor
     const int nhts = indvec.size();
@@ -861,10 +870,10 @@ void interp_to_mfab::interp_eta_to_levelset_multifab2D(
     const amrex::Real spd_xlo,
     const amrex::Real zsl,
     const bool is_periodic,
-    amrex::Gpu::DeviceVector<amrex::Real> etavec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
 
     // Get pointer to device vector
@@ -922,13 +931,13 @@ void interp_to_mfab::interp_velocity_to_multifab2D(
     const amrex::Real spd_dx,
     const amrex::Real spd_xlo,
     const bool is_periodic,
-    amrex::Vector<int> indvec,
-    amrex::Vector<amrex::Real> hvec,
-    amrex::Gpu::DeviceVector<amrex::Real> uvec,
-    amrex::Gpu::DeviceVector<amrex::Real> wvec,
+    const amrex::Vector<int>& indvec,
+    const const amrex::Vector<amrex::Real>& hvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& uvec,
+    const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> problo,
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
 {
     // Number of heights relevant to this processor
     const int nhts = indvec.size();
