@@ -4,7 +4,7 @@
 
 template <typename VT>
 ReadModes<VT>::ReadModes(std::string filename, bool is_ocean, bool allmodes)
-    : m_filename(filename), is_HOS_Ocean(is_ocean), is_init(true)
+    : m_filename(filename), is_init(true), is_HOS_Ocean(is_ocean)
 {
     // Set time index value
     itime_now = 0;
