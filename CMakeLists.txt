@@ -1,5 +1,5 @@
 ## This executable is just for making sure the setup can compile and run
-cmake_minimum_required (VERSION 3.14 FATAL_ERROR)
+cmake_minimum_required (VERSION 3.20 FATAL_ERROR)
 
 # Compiler flags
 if(NOT CMAKE_BUILD_TYPE)
@@ -35,9 +35,8 @@ set(w2a_custom_test_name "w2a_custom_test")
 set(w2a_utests_name "${w2a_base}_unit_tests")
 
 # FFTW
-set(FFTW_DIR /usr/local)
-include_directories(${FFTW_DIR}/include/)
-set(fftw_lib ${FFTW_DIR}/lib/libfftw3.a)
+find_package(FFTW REQUIRED)
+target_link_libraries(waves_2_amr PUBLIC FFTW::FFTW)
 
 # Access source files
 FILE(GLOB cppsrc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)

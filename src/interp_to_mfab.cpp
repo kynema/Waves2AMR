@@ -454,8 +454,6 @@ void interp_to_mfab::interp_velocity_to_field(
 
     // Number of levels
     const int nlevels = vfield.size();
-    // Number of heights relevant to this processor
-    const int nhts = indvec.size();
     // Copy hvec and indvec to device
     amrex::Gpu::DeviceVector<int> indvec_dvc(indvec.size());
     amrex::Gpu::copy(
@@ -464,12 +462,6 @@ void interp_to_mfab::interp_velocity_to_field(
     amrex::Gpu::DeviceVector<amrex::Real> hvec_dvc(hvec.size());
     amrex::Gpu::copy(
         amrex::Gpu::hostToDevice, hvec.begin(), hvec.end(), hvec_dvc.begin());
-    // Get pointers to device vectors
-    const auto* indvec_ptr = indvec_dvc.data();
-    const auto* hvec_ptr = hvec_dvc.data();
-    const auto* uvec_ptr = uvec.data();
-    const auto* vvec_ptr = vvec.data();
-    const auto* wvec_ptr = wvec.data();
 
     // Loop through cells and perform interpolation
     for (int nl = 0; nl < nlevels; ++nl) {
@@ -506,8 +498,6 @@ void interp_to_mfab::interp_velocity_to_field(
 
     // Number of levels
     const int nlevels = vfield.size();
-    // Number of heights relevant to this processor
-    const int nhts = indvec.size();
     // Copy hvec and indvec to device
     amrex::Gpu::DeviceVector<int> indvec_dvc(indvec.size());
     amrex::Gpu::copy(
@@ -516,12 +506,6 @@ void interp_to_mfab::interp_velocity_to_field(
     amrex::Gpu::DeviceVector<amrex::Real> hvec_dvc(hvec.size());
     amrex::Gpu::copy(
         amrex::Gpu::hostToDevice, hvec.begin(), hvec.end(), hvec_dvc.begin());
-    // Get pointers to device vectors
-    const auto* indvec_ptr = indvec_dvc.data();
-    const auto* hvec_ptr = hvec_dvc.data();
-    const auto* uvec_ptr = uvec.data();
-    const auto* vvec_ptr = vvec.data();
-    const auto* wvec_ptr = wvec.data();
 
     // Loop through cells and perform interpolation
     for (int nl = 0; nl < nlevels; ++nl) {
