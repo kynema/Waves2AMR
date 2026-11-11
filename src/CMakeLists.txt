@@ -12,6 +12,8 @@ target_sources(
    read_ascii.cpp
    modes_hosgrid.h
    modes_hosgrid.cpp
+   ocean_padding.h
+   ocean_padding.cpp
    interp_to_mfab.h
    interp_to_mfab.cpp
    )
