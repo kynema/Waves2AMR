@@ -1,4 +1,4 @@
 fftw*
 settings.json
 .vscode*
-build/
+build*/

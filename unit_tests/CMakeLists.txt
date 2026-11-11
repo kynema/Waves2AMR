@@ -14,3 +14,8 @@ target_link_libraries(${w2a_utests_name} PRIVATE gtest)
 target_link_libraries(${w2a_utests_name} PUBLIC ${w2a_lib_name})
 target_include_directories(${w2a_utests_name} SYSTEM PRIVATE
   ${CMAKE_SOURCE_DIR}/submods/googletest/googletest/include)
+
+add_executable(Waves2AMR_padding_tests test_ocean_padding.cpp utest_main.cpp)
+target_link_libraries(Waves2AMR_padding_tests PRIVATE gtest ${w2a_lib_name})
+set_cuda_build_properties(Waves2AMR_padding_tests)
+add_test(NAME ocean_padding COMMAND Waves2AMR_padding_tests)

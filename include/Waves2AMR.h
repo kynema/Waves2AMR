@@ -3,6 +3,7 @@
 // All headers from src
 #include "read_modes.h"
 #include "modes_hosgrid.h"
+#include "ocean_padding.h"
 #include "interp_to_mfab.h"
 
 #endif

@@ -35,8 +35,11 @@ set(w2a_custom_test_name "w2a_custom_test")
 set(w2a_utests_name "${w2a_base}_unit_tests")
 
 # FFTW
-find_package(FFTW REQUIRED)
-target_link_libraries(waves_2_amr PUBLIC FFTW::FFTW)
+find_path(FFTW_INCLUDE_DIR fftw3.h HINTS ${FFTW_DIR}/include)
+find_library(FFTW_LIBRARY fftw3 HINTS ${FFTW_DIR}/lib)
+if(NOT FFTW_INCLUDE_DIR OR NOT FFTW_LIBRARY)
+  message(FATAL_ERROR "FFTW not found; set FFTW_DIR to its installation prefix")
+endif()
 
 # Access source files
 FILE(GLOB cppsrc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
@@ -46,7 +49,8 @@ add_library(${w2a_lib_name} OBJECT)
 # Access source files and catch-all header
 add_subdirectory(src)
 add_subdirectory(include)
-target_link_libraries(${w2a_lib_name} PRIVATE ${fftw_lib})
+target_include_directories(${w2a_lib_name} PUBLIC ${FFTW_INCLUDE_DIR})
+target_link_libraries(${w2a_lib_name} PUBLIC ${FFTW_LIBRARY})
 install(TARGETS ${w2a_lib_name} DESTINATION ${PROJECT_NAME})
 
 # Main executable (for testing compilation and running)
@@ -78,6 +82,7 @@ init_amrex()
 target_link_libraries(${w2a_lib_name} PUBLIC AMReX::amrex)
 
 if(WAVES2AMR_ENABLE_UNIT_TESTS)
+  enable_testing()
   add_executable(${w2a_utests_name})
   add_subdirectory("submods/googletest")
   add_subdirectory("unit_tests")
