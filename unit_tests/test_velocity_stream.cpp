@@ -7,7 +7,7 @@
 
 namespace {
 
-void compare_stream(bool periodic, bool subset, int ny = 6)
+void compare_stream(bool periodic, bool subset, int ny = 6, bool local = false)
 {
     const int nx = 8;
     amrex::Vector<amrex::Real> heights{2., 1.25, 0., -1., -3.};
@@ -60,9 +60,33 @@ void compare_stream(bool periodic, bool subset, int ny = 6)
             u, v, w, *expected[lev], problo[lev], dx[lev]);
     }
     std::vector<int> calls;
+    interp_to_mfab::LocalVelocityPlaneReader local_reader;
+    if (local) {
+        local_reader = [&](int height, const auto& xs, const auto& ys, auto& su,
+                           auto& sv, auto& sw) {
+            calls.push_back(height);
+            for (auto pair :
+                 {std::make_pair(&u, &su), std::make_pair(&v, &sv),
+                  std::make_pair(&w, &sw)}) {
+                std::vector<amrex::Real> source(pair.first->size());
+                amrex::Gpu::copy(
+                    amrex::Gpu::deviceToHost, pair.first->begin(),
+                    pair.first->end(), source.begin());
+                std::vector<amrex::Real> samples;
+                for (int j : ys)
+                    for (int i : xs)
+                        samples.push_back(
+                            source[(height - first) * plane + j * nx + i]);
+                amrex::Gpu::copy(
+                    amrex::Gpu::hostToDevice, samples.begin(), samples.end(),
+                    pair.second->begin());
+            }
+        };
+    }
     const auto memory = interp_to_mfab::stream_velocity_to_field(
         nx, ny, 1., ny == 1 ? 0. : 1., .3, -.7, periodic, indices, heights,
-        actual_ptrs, problo, dx, [&](int height, auto& su, auto& sv, auto& sw) {
+        actual_ptrs, problo, dx,
+        [&](int height, auto& su, auto& sv, auto& sw) {
             calls.push_back(height);
             EXPECT_EQ(su.size(), plane);
             EXPECT_EQ(sv.size(), plane);
@@ -77,8 +101,9 @@ void compare_stream(bool periodic, bool subset, int ny = 6)
             amrex::Gpu::copy(
                 amrex::Gpu::deviceToDevice, w.begin() + offset,
                 w.begin() + offset + plane, sw.begin());
-        });
-    EXPECT_EQ(memory.plane_bytes, 3 * plane * sizeof(amrex::Real));
+        },
+        local_reader);
+    EXPECT_LE(memory.plane_bytes, 3 * plane * sizeof(amrex::Real));
     EXPECT_EQ(
         memory.stencil_bytes, 24 * horizontal_cells * sizeof(amrex::Real));
     EXPECT_EQ(calls, std::vector<int>(indices.begin(), indices.end()));
@@ -109,6 +134,49 @@ TEST(VelocityStream, TwoDimensionalPeriodicAndNonperiodic)
 {
     compare_stream(true, false, 1);
     compare_stream(false, true, 1);
+}
+
+TEST(VelocityStream, LocalSamplesMatchGlobalPlanes)
+{
+    compare_stream(true, false, 6, true);
+    compare_stream(false, true, 6, true);
+    compare_stream(true, false, 1, true);
+}
+
+TEST(VelocityStream, LocalElevationMatchesGlobalPlane)
+{
+    for (int ny : {1, 16}) {
+        const int nx = 32;
+        const amrex::Box box(amrex::IntVect(0), amrex::IntVect(3, 3, 3));
+        amrex::BoxArray boxes(box);
+        amrex::DistributionMapping mapping(boxes);
+        amrex::MultiFab expected(boxes, mapping, 1, 1),
+            actual(boxes, mapping, 1, 1);
+        amrex::Gpu::DeviceVector<amrex::Real> plane(nx * ny);
+        std::vector<amrex::Real> host(nx * ny);
+        for (int n = 0; n < nx * ny; ++n) host[n] = std::sin(.1 * n);
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, host.begin(), host.end(), plane.begin());
+        for (bool periodic : {false, true}) {
+            interp_to_mfab::interp_eta_to_levelset_multifab(
+                nx, ny, 1., 1., 0., 0., 2., periodic, plane, expected,
+                {0., 0., 0.}, {.5, .5, .5});
+            interp_to_mfab::local_eta_to_levelset_field(
+                nx, ny, 1., 1., 0., 0., 2., periodic, {&actual},
+                {{{0., 0., 0.}}}, {{{.5, .5, .5}}},
+                [&](const auto& xs, const auto& ys, auto& output) {
+                    EXPECT_LT(xs.size() * ys.size(), nx * ny);
+                    std::vector<amrex::Real> samples;
+                    for (int j : ys)
+                        for (int i : xs) samples.push_back(host[j * nx + i]);
+                    amrex::Gpu::copy(
+                        amrex::Gpu::hostToDevice, samples.begin(),
+                        samples.end(), output.begin());
+                });
+            amrex::MultiFab::Subtract(actual, expected, 0, 0, 1, 1);
+            EXPECT_EQ(actual.norm0(0, 1), 0.);
+        }
+    }
 }
 
 TEST(VelocityStream, ScratchMemoryDoesNotGrowWithHeightCount)

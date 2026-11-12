@@ -17,3 +17,6 @@ target_sources(${w2a_custom_test_name}
     PRIVATE
     test_modes_reading.cpp
     )
+
+add_executable(Waves2AMR_reconstruction_benchmark benchmark_ocean_reconstruction.cpp)
+target_link_libraries(Waves2AMR_reconstruction_benchmark PRIVATE ${w2a_lib_name})

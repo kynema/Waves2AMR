@@ -10,7 +10,8 @@ FFTW order (full y, compressed x); lengths and spacings use physical units.
 The default cap is `-1` (uncapped); `0` disables padding, and positive `p`
 allows at most `2^p` expansion per direction. No dimension is reduced.
 
-After each mode read, use `pad_ocean_modes(ny, nx, padded_ny, padded_nx, modes)`
+For the original full-grid API, after each mode read use
+`pad_ocean_modes(ny, nx, padded_ny, padded_nx, modes)`
 for elevation and all three velocity mode vectors, before their existing
 reconstruction routines. Allocate FFT buffers/plans and spatial arrays using
 the padded dimensions, and interpolate using the correspondingly smaller
@@ -23,6 +24,44 @@ Padding reduces subsequent linear interpolation loss but does not eliminate
 interpolation or levelset/VOF reconstruction error. Memory scales with padded
 grid area.
 
+## Compact local reconstruction
+
+`modes_hosgrid::OceanReconstruction(source_ny, source_nx, ny, nx, options)`
+keeps source modes compact and evaluates the same padded-grid nodes without
+materializing padded mode vectors. Call `evaluate(modes, xs, ys)` with original
+compressed HOS coefficients and sorted, unique padded-grid indices. The return
+value is row-major over the Cartesian product `(ys, xs)`. Source coefficients
+are not modified. Normalization and Nyquist splitting match `pad_ocean_modes`
+followed by the original inverse FFT, to floating-point roundoff.
+
+`OceanReconstructionOptions` selects `auto` (default), `full`, or `pruned`,
+with a default accounted scratch budget of 512 MiB. `full` uses a full FFTW
+complex-to-real transform and gathers the requested nodes. `pruned` uses
+separable complex FFTs: transform occupied frequency rows, retain only requested
+coordinates, then transform only those coordinates in the other direction.
+Both x-first and y-first orders are available. This is input/output pruning
+at the row/column level, not pruning inside FFTW's individual 1D transforms.
+
+Automatic selection rejects methods exceeding the budget, filters candidates
+whose estimated transform work is more than four times the cheapest feasible
+candidate, then warms each remaining candidate and times two executions.
+A later candidate must be at least 10% faster to replace the current best.
+Plans and the decision are cached until requested indices or reserved scratch
+change. Calibration excludes planning and compact-mode preparation; normal
+`evaluate` timing includes compact-mode preparation. Existing FFTW planner flags
+are supported. Selection is rank-local and requires no MPI communication.
+
+The reported scratch estimate counts the compact expanded spectrum, transform
+buffers/intermediates, one returned host array and its device copy, plus the
+optional `reserved_bytes` argument to `evaluate`. It excludes source input
+arrays, FFTW plan internals, allocator overhead, and destination mesh fields;
+it is not a hard cap on process RSS. If no permitted method fits, reconstruction
+fails explicitly. An empty request performs no FFT.
+
+`ocean_velocity_modes` computes compact depth-dependent velocity coefficients
+using the same depth-factor helper as the original velocity reconstruction.
+It preserves that routine's existing first/second-dimension length convention.
+
 ## Streaming velocity reconstruction
 
 `interp_to_mfab::stream_velocity_to_field` reconstructs velocities directly into
@@ -34,7 +73,7 @@ using the default zero spatial offset. Geometry arrays must contain one entry
 per supplied field. Periodic and nonperiodic interpolation, including
 single-row (2D) source grids, follow the existing interpolation arithmetic.
 
-The routine reconstructs only heights needed by local boxes. It holds three
+The original callback reconstructs only heights needed by local boxes. It holds three
 full horizontal velocity planes and two local sets of four-corner samples for
 each velocity component. Spatial scratch storage is therefore
 `sizeof(Real) * (3 * nx * ny + 24 * local_horizontal_cells)`, independent of the
@@ -46,11 +85,20 @@ The returned `VelocityStreamMemory` reports plane and stencil bytes, excluding
 FFT plans/workspace, spectral vectors, elevation, and destination fields.
 An empty local mesh performs no reconstructions.
 
-Kynema-SGF uses this path for HOS-Ocean initialization (after local boxes exist)
-and mode updates. Initialization processes each AMR level separately, which
-can repeat FFTs in exchange for lower memory use. Full horizontal FFTs still
-run on each rank; this is not a distributed or pruned FFT. HOS-NWT retains its
-existing reconstruction path.
+Alternatively, pass an empty original callback and a `LocalVelocityPlaneReader`
+as the final argument. This callback receives the height and sorted unique
+`xs, ys` needed by all local boxes, including ghosts and periodic seams, and
+fills three arrays over their Cartesian product. `local_eta_to_levelset_field`
+provides the analogous elevation path. Both paths use the same horizontal
+stencil calculation and existing interpolation arithmetic.
+
+Kynema-SGF uses compact local reconstruction for HOS-Ocean elevation and streamed
+velocity, including initialization after boxes exist. Its budget also accounts
+for the three local velocity arrays, local stencils, device index maps and
+compact depth coefficients. Initialization processes each level separately.
+Compact input modes remain replicated per rank; no distributed FFT is used.
+Fragmented boxes may have a Cartesian-product footprint larger than the exact
+union of requested points. HOS-NWT retains its existing reconstruction path.
 
 Build and run the focused tests:
 
@@ -59,3 +107,20 @@ cmake -S . -B build -DFFTW_DIR=/path/to/fftw
 cmake --build build --target Waves2AMR_padding_tests -j4
 ./build/unit_tests/Waves2AMR_padding_tests
 ```
+
+Measure reconstruction speed and accounted memory separately from solver costs:
+
+```sh
+cmake --build build --target Waves2AMR_reconstruction_benchmark -j4
+# source width, padded width, local square width, timed repeats
+./build/tests/Waves2AMR_reconstruction_benchmark 256 4096 512 10
+```
+
+The benchmark compares all choices with the full FFT and fails if the maximum
+absolute discrepancy exceeds `1e-10`. It reports steady-state time per scalar
+plane, excluding first-call selection and planning. On an Apple M4, 256-square
+source modes on a 4096-square output grid gave roughly 13.6x and 6.1x faster
+reconstruction for 256-square and 1024-square local footprints, respectively.
+Accounted scratch decreased from 258 to 3.1 MiB and from 273 to 21.1 MiB.
+A full 128-square footprint with 64-square source modes selected `full`.
+These are illustrative host-side measurements, not guaranteed solver speedups.

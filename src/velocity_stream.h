@@ -4,6 +4,7 @@
 #include "AMReX_MultiFab.H"
 #include <cstddef>
 #include <functional>
+#include <vector>
 
 namespace interp_to_mfab {
 
@@ -11,6 +12,19 @@ using VelocityPlaneReader = std::function<void(
     int,
     amrex::Gpu::DeviceVector<amrex::Real>&,
     amrex::Gpu::DeviceVector<amrex::Real>&,
+    amrex::Gpu::DeviceVector<amrex::Real>&)>;
+
+using LocalVelocityPlaneReader = std::function<void(
+    int,
+    const std::vector<int>&,
+    const std::vector<int>&,
+    amrex::Gpu::DeviceVector<amrex::Real>&,
+    amrex::Gpu::DeviceVector<amrex::Real>&,
+    amrex::Gpu::DeviceVector<amrex::Real>&)>;
+
+using LocalElevationReader = std::function<void(
+    const std::vector<int>&,
+    const std::vector<int>&,
     amrex::Gpu::DeviceVector<amrex::Real>&)>;
 
 struct VelocityStreamMemory
@@ -34,7 +48,22 @@ VelocityStreamMemory stream_velocity_to_field(
     const amrex::Vector<amrex::MultiFab*>& fields,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
-    const VelocityPlaneReader& read_plane);
+    const VelocityPlaneReader& read_plane,
+    const LocalVelocityPlaneReader& read_local_plane = {});
+
+void local_eta_to_levelset_field(
+    int nx,
+    int ny,
+    amrex::Real sx,
+    amrex::Real sy,
+    amrex::Real xlo,
+    amrex::Real ylo,
+    amrex::Real zsl,
+    bool periodic,
+    const amrex::Vector<amrex::MultiFab*>& fields,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
+    const LocalElevationReader& read);
 
 } // namespace interp_to_mfab
 
