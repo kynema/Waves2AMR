@@ -112,7 +112,8 @@ LocalGrid local_grid(
     bool periodic,
     const amrex::Vector<amrex::MultiFab*>& fields,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
-    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx)
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
+    interp_to_mfab::Interpolation interpolation)
 {
     LocalGrid grid;
     std::vector<int> xm(nx, -1), ym(ny, -1);
@@ -120,6 +121,13 @@ LocalGrid local_grid(
         for (amrex::MFIter mfi(*fields[lev]); mfi.isValid(); ++mfi) {
             const auto cells = mfi.growntilebox();
             for (int i = cells.smallEnd(0); i <= cells.bigEnd(0); ++i) {
+                if (interpolation == interp_to_mfab::Interpolation::cubic) {
+                    const auto s = interp_to_mfab::horizontal_cubic(
+                        problo[lev][0] + (i + .5) * dx[lev][0] - xlo, nx, sx,
+                        periodic);
+                    for (int a = 0; a < s.count; ++a) xm[s.index[a]] = 0;
+                    continue;
+                }
                 const auto s = stencil(
                     i, 0, nx, ny, sx, sy, xlo, ylo, periodic, problo[lev],
                     dx[lev]);
@@ -128,6 +136,13 @@ LocalGrid local_grid(
                 xm[s.i0] = xm[s.i1] = 0;
             }
             for (int j = cells.smallEnd(1); j <= cells.bigEnd(1); ++j) {
+                if (interpolation == interp_to_mfab::Interpolation::cubic) {
+                    const auto s = interp_to_mfab::horizontal_cubic(
+                        problo[lev][1] + (j + .5) * dx[lev][1] - ylo, ny, sy,
+                        periodic);
+                    for (int a = 0; a < s.count; ++a) ym[s.index[a]] = 0;
+                    continue;
+                }
                 const auto s = stencil(
                     0, j, nx, ny, sx, sy, xlo, ylo, periodic, problo[lev],
                     dx[lev]);
@@ -158,6 +173,171 @@ LocalGrid local_grid(
     return grid;
 }
 
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real horizontal_value(
+    const amrex::Real* values,
+    const interp_to_mfab::PolynomialStencil& x,
+    const interp_to_mfab::PolynomialStencil& y,
+    int width,
+    const int* xm,
+    const int* ym)
+{
+    amrex::Real result = 0.;
+    for (int b = 0; b < y.count; ++b) {
+        amrex::Real row = 0.;
+        const int j = ym ? ym[y.index[b]] : y.index[b];
+        for (int a = 0; a < x.count; ++a) {
+            const int i = xm ? xm[x.index[a]] : x.index[a];
+            row += x.weight[a] * values[i + j * width];
+        }
+        result += y.weight[b] * row;
+    }
+    return result;
+}
+
+interp_to_mfab::VelocityStreamMemory stream_cubic(
+    int nx,
+    int ny,
+    amrex::Real sx,
+    amrex::Real sy,
+    amrex::Real xlo,
+    amrex::Real ylo,
+    bool periodic,
+    const amrex::Vector<int>& indices,
+    const amrex::Vector<amrex::Real>& heights,
+    const amrex::Vector<amrex::MultiFab*>& fields,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
+    const interp_to_mfab::VelocityPlaneReader& read_plane,
+    const interp_to_mfab::LocalVelocityPlaneReader& read_local_plane)
+{
+    using namespace interp_to_mfab;
+    const int first = indices.front(), last = indices.back();
+    const auto top_height = heights[first], bottom_height = heights[last];
+    const int depth_count = amrex::min(4, last - first + 1);
+    VelocityStreamMemory memory;
+    std::vector<LocalPatch> patches;
+    for (int lev = 0; lev < fields.size(); ++lev) {
+        AMREX_ALWAYS_ASSERT(fields[lev] && fields[lev]->nComp() >= 3);
+        for (amrex::MFIter mfi(*fields[lev]); mfi.isValid(); ++mfi) {
+            const auto cells = mfi.growntilebox();
+            const auto plo = problo[lev], spacing = dx[lev];
+            const int top = upper_height(
+                plo[2] + (cells.bigEnd(2) + .5) * spacing[2], heights.data(),
+                first, last);
+            const int bottom = upper_height(
+                plo[2] + (cells.smallEnd(2) + .5) * spacing[2], heights.data(),
+                first, last);
+            auto horizontal = cells;
+            horizontal.setSmall(2, 0);
+            horizontal.setBig(2, 0);
+            memory.stencil_bytes +=
+                horizontal.numPts() * 3 * depth_count * sizeof(amrex::Real);
+            patches.push_back(
+                {cells, fields[lev]->array(mfi), plo, spacing,
+                 vertical_stencil_start(top, first, last),
+                 vertical_stencil_start(bottom, first, last) + depth_count - 1,
+                 std::make_unique<amrex::FArrayBox>(
+                     horizontal, 3 * depth_count)});
+        }
+    }
+    if (patches.empty()) return memory;
+    const bool local = static_cast<bool>(read_local_plane);
+    LocalGrid grid;
+    if (local)
+        grid = local_grid(
+            nx, ny, sx, sy, xlo, ylo, periodic, fields, problo, dx,
+            Interpolation::cubic);
+    const auto count =
+        local ? grid.xs.size() * grid.ys.size() : std::size_t(nx) * ny;
+    const int width = local ? grid.xs.size() : nx;
+    const auto* xm = local ? grid.xmap.data() : nullptr;
+    const auto* ym = local ? grid.ymap.data() : nullptr;
+    amrex::Gpu::DeviceVector<amrex::Real> u(count), v(count), w(count);
+    memory.plane_bytes = 3 * count * sizeof(amrex::Real);
+    for (int h = first; h <= last; ++h) {
+        bool needed = false;
+        for (const auto& patch : patches)
+            needed = needed || (h >= patch.first && h <= patch.last);
+        if (!needed) continue;
+        if (local)
+            read_local_plane(h, grid.xs, grid.ys, u, v, w);
+        else
+            read_plane(h, u, v, w);
+        AMREX_ALWAYS_ASSERT(
+            u.size() == count && v.size() == count && w.size() == count);
+        const auto* up = u.data();
+        const auto* vp = v.data();
+        const auto* wp = w.data();
+        for (const auto& patch : patches) {
+            if (h < patch.first || h > patch.last) continue;
+            const auto samples = patch.samples->array();
+            const auto plo = patch.plo, spacing = patch.dx;
+            const int offset = 3 * (h % depth_count);
+            amrex::ParallelFor(
+                patch.samples->box(), [=] AMREX_GPU_DEVICE(int i, int j, int) {
+                    const auto x = horizontal_cubic(
+                        plo[0] + (i + .5) * spacing[0] - xlo, nx, sx, periodic);
+                    const auto y = horizontal_cubic(
+                        plo[1] + (j + .5) * spacing[1] - ylo, ny, sy, periodic);
+                    samples(i, j, 0, offset) =
+                        horizontal_value(up, x, y, width, xm, ym);
+                    samples(i, j, 0, offset + 1) =
+                        ny == 1 ? 0.
+                                : horizontal_value(vp, x, y, width, xm, ym);
+                    samples(i, j, 0, offset + 2) =
+                        horizontal_value(wp, x, y, width, xm, ym);
+                });
+            if (h < patch.first + depth_count - 1) continue;
+            const int start = h - depth_count + 1;
+            amrex::GpuArray<amrex::Real, 4> nodes{};
+            for (int n = 0; n < depth_count; ++n) nodes[n] = heights[start + n];
+            const auto output = patch.output;
+            // Several boundary intervals can share the same one-sided stencil.
+            for (int upper = amrex::max(first, start - 1);
+                 upper <= amrex::min(last - 1, h); ++upper) {
+                if (vertical_stencil_start(upper, first, last) != start)
+                    continue;
+                const auto zhi = heights[upper], zlo = heights[upper + 1];
+                amrex::ParallelFor(
+                    patch.cells, [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                        const auto z = plo[2] + (k + .5) * spacing[2];
+                        if ((upper != first && z >= zhi) ||
+                            (upper != last - 1 && z < zlo))
+                            return;
+                        if (z - .5 * spacing[2] > zhi) {
+                            for (int c = 0; c < 3; ++c) output(i, j, k, c) = 0.;
+                            return;
+                        }
+                        // Keep the legacy linear extrapolation outside the
+                        // height range.
+                        const bool outside =
+                            z > top_height || z < bottom_height;
+                        const int begin = outside ? upper : start;
+                        const int nweights = outside ? 2 : depth_count;
+                        amrex::Real zs[4];
+                        for (int n = 0; n < nweights; ++n)
+                            zs[n] = outside ? (n == 0 ? zhi : zlo) : nodes[n];
+                        const auto weights =
+                            lagrange_stencil(z, zs, begin, nweights);
+                        for (int c = 0; c < 3; ++c) {
+                            amrex::Real value = 0.;
+                            for (int n = 0; n < nweights; ++n)
+                                value +=
+                                    weights.weight[n] *
+                                    samples(
+                                        i, j, 0,
+                                        3 * (weights.index[n] % depth_count) +
+                                            c);
+                            output(i, j, k, c) = value;
+                        }
+                    });
+            }
+        }
+        amrex::Gpu::streamSynchronize();
+    }
+    return memory;
+}
+
 } // namespace
 
 interp_to_mfab::VelocityStreamMemory interp_to_mfab::stream_velocity_to_field(
@@ -174,7 +354,8 @@ interp_to_mfab::VelocityStreamMemory interp_to_mfab::stream_velocity_to_field(
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
     const VelocityPlaneReader& read_plane,
-    const LocalVelocityPlaneReader& read_local_plane)
+    const LocalVelocityPlaneReader& read_local_plane,
+    Interpolation interpolation)
 {
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(
         nx > 1 && ny >= 1 && sx > 0 && (ny == 1 || sy > 0) &&
@@ -190,6 +371,10 @@ interp_to_mfab::VelocityStreamMemory interp_to_mfab::stream_velocity_to_field(
     for (int n = 1; n < heights.size(); ++n) {
         AMREX_ALWAYS_ASSERT(heights[n] < heights[n - 1]);
     }
+    if (interpolation == Interpolation::cubic)
+        return stream_cubic(
+            nx, ny, sx, sy, xlo, ylo, periodic, indices, heights, fields,
+            problo, dx, read_plane, read_local_plane);
     VelocityStreamMemory memory;
     std::vector<LocalPatch> patches;
     const int first = indices.front(), last = indices.back();
@@ -219,8 +404,9 @@ interp_to_mfab::VelocityStreamMemory interp_to_mfab::stream_velocity_to_field(
     }
     LocalGrid grid;
     if (read_local_plane)
-        grid =
-            local_grid(nx, ny, sx, sy, xlo, ylo, periodic, fields, problo, dx);
+        grid = local_grid(
+            nx, ny, sx, sy, xlo, ylo, periodic, fields, problo, dx,
+            interpolation);
     const bool local = static_cast<bool>(read_local_plane);
     const auto count = local ? grid.xs.size() * grid.ys.size()
                              : static_cast<std::size_t>(nx) * ny;
@@ -331,7 +517,8 @@ void interp_to_mfab::local_eta_to_levelset_field(
     const amrex::Vector<amrex::MultiFab*>& fields,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
-    const LocalElevationReader& read)
+    const LocalElevationReader& read,
+    Interpolation interpolation)
 {
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(
         nx > 1 && ny >= 1 && sx > 0 && (ny == 1 || sy > 0) &&
@@ -340,8 +527,8 @@ void interp_to_mfab::local_eta_to_levelset_field(
         "Waves2AMR: invalid local elevation inputs");
     for (auto* field : fields)
         AMREX_ALWAYS_ASSERT(field && field->nComp() >= 1);
-    auto grid =
-        local_grid(nx, ny, sx, sy, xlo, ylo, periodic, fields, problo, dx);
+    auto grid = local_grid(
+        nx, ny, sx, sy, xlo, ylo, periodic, fields, problo, dx, interpolation);
     if (grid.xs.empty() || grid.ys.empty()) return;
     amrex::Gpu::DeviceVector<amrex::Real> eta(grid.xs.size() * grid.ys.size());
     read(grid.xs, grid.ys, eta);
@@ -356,6 +543,18 @@ void interp_to_mfab::local_eta_to_levelset_field(
             const auto output = fields[lev]->array(mfi);
             amrex::ParallelFor(
                 mfi.growntilebox(), [=] AMREX_GPU_DEVICE(int i, int j, int k) {
+                    if (interpolation == Interpolation::cubic) {
+                        const auto x = horizontal_cubic(
+                            plo[0] + (i + .5) * spacing[0] - xlo, nx, sx,
+                            periodic);
+                        const auto y = horizontal_cubic(
+                            plo[1] + (j + .5) * spacing[1] - ylo, ny, sy,
+                            periodic);
+                        output(i, j, k) =
+                            horizontal_value(values, x, y, width, xm, ym) +
+                            zsl - (plo[2] + (k + .5) * spacing[2]);
+                        return;
+                    }
                     const auto s = stencil(
                         i, j, nx, ny, sx, sy, xlo, ylo, periodic, plo, spacing);
                     const auto a = values[xm[s.i0] + ym[s.j0] * width];

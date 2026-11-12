@@ -17,6 +17,7 @@ target_sources(
    interp_to_mfab.h
    interp_to_mfab.cpp
    velocity_stream.h
+   interpolation_stencil.h
    velocity_stream.cpp
    ocean_reconstruction.h
    ocean_reconstruction.cpp
