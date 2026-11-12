@@ -283,6 +283,40 @@ void modes_hosgrid::populate_hos_vel(
     dimensionalize_vel(n0, n1, dimL, dimT, HOS_u, HOS_v, HOS_w, indv_start);
 }
 
+std::pair<double, double> modes_hosgrid::ocean_depth_factors(
+    double k, double nd_depth, double nd_z, bool first_column, bool zero_mode)
+{
+    const double kZ = k * (nd_z + nd_depth);
+    const double kD = k * nd_depth;
+    double coeff = 1.0, coeff2 = 1.0;
+    if (zero_mode) {
+        return {coeff, coeff2};
+    }
+    if (first_column) {
+        if ((kZ < 50.0) && (kD <= 50.0)) {
+            coeff =
+                exp(k * nd_z) * (1.0 + exp(-2.0 * kZ)) / (1.0 + exp(-2.0 * kD));
+            coeff2 =
+                exp(k * nd_z) * (1.0 - exp(-2.0 * kZ)) / (1.0 - exp(-2.0 * kD));
+        } else {
+            coeff = exp(k * nd_z);
+            coeff2 = coeff;
+        }
+    } else {
+        if ((kZ < 50.0) && (kD <= 50.0)) {
+            coeff = cosh(kZ) / cosh(kD);
+            coeff2 = sinh(kZ) / sinh(kD);
+        } else {
+            coeff = exp(k * nd_z);
+            coeff2 = coeff;
+        }
+    }
+    const double cap = first_column ? 3.0 : 1000.0;
+    if (coeff >= cap) coeff = cap;
+    if (coeff2 >= cap) coeff2 = cap;
+    return {coeff, coeff2};
+}
+
 void modes_hosgrid::populate_hos_ocean_vel_nondim(
     const int n0,
     const int n1,
@@ -317,48 +351,8 @@ void modes_hosgrid::populate_hos_ocean_vel_nondim(
                 (double)(ix < n0 / 2 + 1 ? ix : ix - n0) * twoPi_xlen;
             const double ky = (double)iy * twoPi_ylen;
             const double k = sqrt(kxN2 * kxN2 + ky * ky);
-            // Get depth-related quantities
-            const double kZ = k * (nd_z + nd_depth);
-            const double kD = k * nd_depth;
-            // Get coefficients
-            double coeff = 1.0;
-            double coeff2 = 1.0;
-            if (iy == 0) {
-                // Do nothing for ix = 0, iy = 0
-                if (ix != 0) {
-                    // Modified coeffs for iy = 0, ix > 0
-                    if ((kZ < 50.0) && (kD <= 50.0)) {
-                        coeff = exp(k * nd_z) * (1.0 + exp(-2.0 * kZ)) /
-                                (1.0 + exp(-2.0 * kD));
-                        coeff2 = exp(k * nd_z) * (1.0 - exp(-2.0 * kZ)) /
-                                 (1.0 - exp(-2.0 * kD));
-                    } else {
-                        coeff = exp(k * nd_z);
-                        coeff2 = coeff;
-                    }
-                    if (coeff >= 3.0) {
-                        coeff = 3.0;
-                    }
-                    if (coeff2 >= 3.0) {
-                        coeff2 = 3.0;
-                    }
-                }
-            } else {
-                // Ordinary coefficients for other cases
-                if ((kZ < 50.0) && (kD <= 50.0)) {
-                    coeff = cosh(kZ) / cosh(kD);
-                    coeff2 = sinh(kZ) / sinh(kD);
-                } else {
-                    coeff = exp(k * nd_z);
-                    coeff2 = coeff;
-                }
-                if (coeff >= 1000.0) {
-                    coeff = 1000.0;
-                }
-                if (coeff2 >= 1000.0) {
-                    coeff2 = 1000.0;
-                }
-            }
+            const auto [coeff, coeff2] = ocean_depth_factors(
+                k, nd_depth, nd_z, iy == 0, ix == 0 && iy == 0);
             // Multiply modes by coefficients
             // hosProcedure is velocity, I think
             const int idx = ix * (n1 / 2 + 1) + iy;

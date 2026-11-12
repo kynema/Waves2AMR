@@ -3,10 +3,14 @@
 #include "AMReX_Gpu.H"
 #include "read_modes.h"
 #include <fftw3.h>
+#include <utility>
 
 namespace modes_hosgrid {
 
 enum struct planner_flags { estimate, patient, exhaustive, measure };
+
+std::pair<double, double> ocean_depth_factors(
+    double k, double nd_depth, double nd_z, bool first_column, bool zero_mode);
 
 void copy_complex(
     const int n0,
