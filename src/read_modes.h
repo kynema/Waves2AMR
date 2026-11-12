@@ -6,6 +6,19 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <array>
+#include <memory>
+#include <limits>
+#include <stdexcept>
+#include <cmath>
+#include <type_traits>
+
+struct ModesMetadata
+{
+    std::array<int, 3> dimensions{};
+    // Dimensional dt, stop time, x/y lengths, depth, g, length/time scales.
+    std::array<double, 8> scalars{};
+};
 
 template <typename VT>
 class ReadModes
@@ -25,7 +38,25 @@ public:
 
     ReadModes();
 
-    bool initialize(std::string, bool is_ocean, bool allmodes = false);
+    bool initialize(
+        std::string,
+        bool is_ocean,
+        bool allmodes = false,
+        bool store_modes = true);
+    void initialize(const ModesMetadata&, bool is_ocean);
+    ModesMetadata metadata() const;
+    std::size_t records_read() const { return m_records_read; }
+
+    // Direct reads own no coefficient storage or cache; callers may cache their
+    // last successful timestep. A failed EOF read leaves destinations
+    // untouched.
+    bool read_into(
+        int itime,
+        std::vector<VT>& mX,
+        std::vector<VT>& mY,
+        std::vector<VT>& mZ,
+        std::vector<VT>& mFS,
+        std::vector<VT>* mAdd = nullptr);
 
     void print_file_constants();
 
@@ -179,15 +210,32 @@ private:
     bool ascii_read(const int itime);
     bool ascii_read_full(const int itime);
     bool ascii_read_brief(const int itime);
+    bool ascii_read_into(
+        int itime,
+        std::vector<VT>& mX,
+        std::vector<VT>& mY,
+        std::vector<VT>& mZ,
+        std::vector<VT>& mFS,
+        std::vector<VT>* mAdd,
+        std::vector<VT>* mT,
+        std::vector<VT>* mFST,
+        std::vector<VT>* mAddT);
+    void set_dimensions(bool allmodes, bool store_modes);
 
     // Dimensionalize read-in quantities
     void dimensionalize();
 
     // HOS data filename
     std::string m_filename;
+    // Copies remain supported by legacy by-value APIs. Every read seeks
+    // explicitly, so copied readers can use this handle sequentially.
+    std::shared_ptr<std::ifstream> m_stream;
+    std::streamoff m_file_bytes{0};
+    int m_cached_step{std::numeric_limits<int>::min()};
+    std::size_t m_records_read{0};
 
     // HOS data dimensions
-    int n1, n2, n3{-1};
+    int n1{0}, n2{0}, n3{-1};
     double dt_out, f_out, T_stop, xlen, ylen, depth, g, L, T;
 
     // HOS data vectors
@@ -195,9 +243,9 @@ private:
         modeAddT;
 
     // HOS working dimensions
-    int vec_size;
-    int n1o2p1;       // Ocean only
-    int vec_add_size; // NWT only
+    int vec_size{0};
+    int n1o2p1;          // Ocean only
+    int vec_add_size{0}; // NWT only
 
     // Current time index
     int itime_now;
