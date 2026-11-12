@@ -156,11 +156,47 @@ velocity, including initialization after boxes exist. Its budget also accounts
 for the three local velocity arrays, local stencils, device index maps and
 compact depth coefficients. Initialization processes each level separately.
 Compact input modes remain replicated per rank; no distributed FFT is used.
+Kynema-SGF reads headers and retained coefficients only on its I/O rank, then
+broadcasts metadata and compact coefficients to all ranks. EOF status and loop
+offsets are synchronized before coefficients; averaging and ghost exchanges
+are unchanged. A repeated request for the already-distributed timestep skips
+both parsing and coefficient broadcasts.
 Fragmented boxes may have a Cartesian-product footprint larger than the exact
 union of requested points. Cubic support can require more FFT nodes and heights
 than linear, so smaller local stencils do not guarantee lower total memory or
 runtime. Both source types defer spatial reconstruction until boxes exist and
 avoid storing full horizontal planes at every interpolation height.
+
+### Modes I/O
+
+Both ASCII readers retain a binary file handle and seek directly to HOS
+SWENSE direct-access records (18-byte scalar slots). Ocean records contain
+12 scalar slots per complex-mode location; NWT records reserve eight slots
+per ordinary-mode location, with each additional-mode block padded to the
+ordinary x width. The special
+header/initialization record at timestep `-1` retains its original layout.
+Files must use this fixed-width format and must not be modified while open.
+Retained blocks are parsed with finite-value checks; brief reads skip the
+time-derivative blocks without numeric conversion, except the displaced NWT
+initialization record, which retains legacy sequential parsing.
+
+Legacy `get_data`/`read_data` APIs keep a last-successful-record cache.
+`get_data` leaves caller vectors untouched on EOF or a parsing error.
+EOF returns `false`; malformed headers, retained values, partial records,
+invalid indices and I/O failures throw exceptions. Reader copies share the
+file handle but keep independent coefficient caches; sequential use is
+supported, concurrent reads on a reader or its copies are not.
+
+For applications that own their coefficient arrays, initialize with
+`initialize(filename, is_ocean, false, false)` and use
+`read_into(step, x, y, z, fs)` (Ocean) or
+`read_into(step, x, y, z, fs, &additional)` (NWT). This avoids internal
+coefficient storage and output copies. The direct API resizes destinations,
+does not cache, and may partially modify them before throwing a parsing error;
+do not use failed results. EOF leaves them untouched. `records_read()` counts
+successful parses, excluding legacy cache hits. `metadata()` exports
+dimensional metadata; `initialize(metadata, is_ocean)` creates a metadata-only
+reader on ranks that do not access the file.
 
 Build and run the focused tests:
 

@@ -291,7 +291,7 @@ TEST_F(AsciiReadTest, InitializeWrongFile) {
   // Read
   ReadModes<std::complex<double>> rmodes;
 
-  EXPECT_DEATH(rmodes.initialize(fname, true, true);, "");
+  EXPECT_THROW(rmodes.initialize(fname, true, true), std::runtime_error);
 }
 
 TEST_F(AsciiReadTest, ModesInit) {
@@ -371,7 +371,7 @@ TEST_F(AsciiReadTest, InitializeWrongFileNWT) {
   // Read
   ReadModes<double> rmodes;
 
-  EXPECT_DEATH(rmodes.initialize(fname, false, true);, "");
+  EXPECT_THROW(rmodes.initialize(fname, false, true), std::runtime_error);
 }
 
 TEST_F(AsciiReadTest, InitEmptyConstructorNWT) {
@@ -380,7 +380,7 @@ TEST_F(AsciiReadTest, InitEmptyConstructorNWT) {
   // Read
   ReadModes<double> rmodes;
 
-  rmodes.initialize(fname, true);
+  rmodes.initialize(fname, false);
 
   EXPECT_EQ(rmodes.get_n1(), 64);
   EXPECT_EQ(rmodes.get_n3(), 32);

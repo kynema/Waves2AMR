@@ -4,45 +4,13 @@
 
 template <typename VT>
 ReadModes<VT>::ReadModes(std::string filename, bool is_ocean, bool allmodes)
-    : m_filename(filename), is_init(true), is_HOS_Ocean(is_ocean)
+    : ReadModes()
 {
-    // Set time index value
-    itime_now = 0;
-
-    // Initialize
-    bool file_exists = ascii_initialize(is_HOS_Ocean);
-    if (!file_exists) {
+    if (!initialize(filename, is_ocean, allmodes)) {
         std::cout << "ABORT: ReadModes is initializing with a file, but the "
                      "specified file does not exist.\n";
         std::exit(1);
     }
-
-    // Get working dimensions
-    n1o2p1 = n1 / 2 + 1;
-
-    // Calculate size of mode vectors
-    vec_size = n2 * (is_HOS_Ocean ? n1o2p1 : n1);
-
-    modeX.resize(vec_size);
-    modeY.resize(vec_size);
-    modeZ.resize(vec_size);
-    modeFS.resize(vec_size);
-    if (!is_ocean) {
-        // Grid2Grid hosNWTMode.inc, line 37
-        vec_add_size = n2 * n3;
-        modeAdd.resize(vec_add_size);
-    }
-    // These modes are optional
-    if (allmodes) {
-        modeT.resize(vec_size);
-        modeFST.resize(vec_size);
-        if (!is_ocean) {
-            modeAddT.resize(vec_add_size);
-        }
-    }
-
-    // Dimensionalize all nondim scalar quantities
-    dimensionalize();
 }
 
 template <typename VT>
@@ -83,7 +51,7 @@ ReadModes<VT>::ReadModes() : is_init(false)
 
 template <typename VT>
 bool ReadModes<VT>::initialize(
-    std::string filename, bool is_ocean, bool allmodes)
+    std::string filename, bool is_ocean, bool allmodes, bool store_modes)
 {
     // Check if already initialized
     if (is_init) {
@@ -91,7 +59,6 @@ bool ReadModes<VT>::initialize(
                      "initialize has been called again.\n";
         std::exit(1);
     }
-    is_init = true;
     m_filename = filename;
     is_HOS_Ocean = is_ocean;
 
@@ -104,34 +71,99 @@ bool ReadModes<VT>::initialize(
     if (!file_exists) {
         return file_exists;
     }
+    set_dimensions(allmodes, store_modes);
+    dimensionalize();
+    for (const double value : {dt_out, T_stop, xlen, ylen, depth, g, L, T})
+        if (!std::isfinite(value))
+            throw std::runtime_error("Waves2AMR: nonfinite modes header");
+    if (depth <= 0 || xlen <= 0 || ylen < 0 || g <= 0 || T_stop < 0)
+        throw std::runtime_error("Waves2AMR: invalid modes header");
+    is_init = true;
+    return true;
+}
 
-    // Get working dimensions
+template <typename VT>
+void ReadModes<VT>::set_dimensions(bool allmodes, bool store_modes)
+{
     n1o2p1 = n1 / 2 + 1;
-
-    // Calculate size of mode vectors
-    vec_size = n2 * (is_HOS_Ocean ? n1o2p1 : n1);
-    vec_add_size = n2 * n3;
-
+    const auto count =
+        static_cast<long long>(n2) * (is_HOS_Ocean ? n1o2p1 : n1);
+    const auto additional = is_HOS_Ocean ? 0 : static_cast<long long>(n2) * n3;
+    if (n1 <= 0 || n2 <= 0 || (!is_HOS_Ocean && (n3 <= 0 || n3 > n1)) ||
+        count > std::numeric_limits<int>::max() ||
+        additional > std::numeric_limits<int>::max()) {
+        throw std::runtime_error("Waves2AMR: invalid modes dimensions");
+    }
+    vec_size = static_cast<int>(count);
+    vec_add_size = static_cast<int>(additional);
+    if (!store_modes) return;
     modeX.resize(vec_size);
     modeY.resize(vec_size);
     modeZ.resize(vec_size);
     modeFS.resize(vec_size);
-    if (!is_ocean) {
+    if (!is_HOS_Ocean) {
         modeAdd.resize(vec_add_size);
     }
     // These modes are optional
     if (allmodes) {
         modeT.resize(vec_size);
         modeFST.resize(vec_size);
-        if (!is_ocean) {
+        if (!is_HOS_Ocean) {
             modeAddT.resize(vec_add_size);
         }
     }
+}
 
-    // Dimensionalize all nondim scalar quantities
-    dimensionalize();
+template <typename VT>
+ModesMetadata ReadModes<VT>::metadata() const
+{
+    if (!is_init) throw std::logic_error("Waves2AMR: reader not initialized");
+    return {{n1, n2, n3}, {dt_out, T_stop, xlen, ylen, depth, g, L, T}};
+}
 
-    return file_exists;
+template <typename VT>
+void ReadModes<VT>::initialize(const ModesMetadata& data, bool is_ocean)
+{
+    if (is_init)
+        throw std::logic_error("Waves2AMR: reader already initialized");
+    if (is_ocean != std::is_same_v<VT, std::complex<double>>)
+        throw std::invalid_argument(
+            "Waves2AMR: mode type and metadata disagree");
+    n1 = data.dimensions[0];
+    n2 = data.dimensions[1];
+    n3 = data.dimensions[2];
+    dt_out = data.scalars[0];
+    T_stop = data.scalars[1];
+    xlen = data.scalars[2];
+    ylen = data.scalars[3];
+    depth = data.scalars[4];
+    g = data.scalars[5];
+    L = data.scalars[6];
+    T = data.scalars[7];
+    for (const auto value : data.scalars)
+        if (!std::isfinite(value))
+            throw std::invalid_argument("Waves2AMR: nonfinite modes metadata");
+    if (dt_out <= 0 || L <= 0 || T <= 0 || depth <= 0 || xlen <= 0 ||
+        ylen < 0 || g <= 0 || T_stop < 0)
+        throw std::invalid_argument("Waves2AMR: invalid modes metadata");
+    f_out = 1. / dt_out;
+    is_HOS_Ocean = is_ocean;
+    itime_now = 0;
+    set_dimensions(false, false);
+    is_init = true;
+}
+
+template <typename VT>
+bool ReadModes<VT>::read_into(
+    int itime,
+    std::vector<VT>& mX,
+    std::vector<VT>& mY,
+    std::vector<VT>& mZ,
+    std::vector<VT>& mFS,
+    std::vector<VT>* mAdd)
+{
+    return ascii_read_into(
+        itime, mX, mY, mZ, mFS, mAdd, nullptr, nullptr, nullptr);
 }
 
 // Version that uses stored index as guess and increments it
@@ -187,8 +219,11 @@ bool ReadModes<VT>::read_data(double time)
 template <typename VT>
 bool ReadModes<VT>::read_data(int itime)
 {
-    // Read (TODO: according to file type)
-    return ascii_read(itime);
+    if (itime == m_cached_step) return true;
+    m_cached_step = std::numeric_limits<int>::min();
+    const bool available = ascii_read(itime);
+    if (available) m_cached_step = itime;
+    return available;
 }
 
 template <typename VT>
@@ -236,7 +271,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(time);
     // Copy data to output
-    output_data(mX, mY, mZ, mT, mFS, mFST);
+    if (flag) output_data(mX, mY, mZ, mT, mFS, mFST);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -254,7 +289,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(itime);
     // Copy data to output
-    output_data(mX, mY, mZ, mT, mFS, mFST);
+    if (flag) output_data(mX, mY, mZ, mT, mFS, mFST);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -270,7 +305,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(time);
     // Copy data to output
-    output_data(mX, mY, mZ, mFS);
+    if (flag) output_data(mX, mY, mZ, mFS);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -286,7 +321,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(itime);
     // Copy data to output
-    output_data(mX, mY, mZ, mFS);
+    if (flag) output_data(mX, mY, mZ, mFS);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -344,7 +379,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(time);
     // Copy data to output
-    output_data(mX, mY, mZ, mT, mFS, mFST, mAdd, mAddT);
+    if (flag) output_data(mX, mY, mZ, mT, mFS, mFST, mAdd, mAddT);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -364,7 +399,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(itime);
     // Copy data to output
-    output_data(mX, mY, mZ, mT, mFS, mFST, mAdd, mAddT);
+    if (flag) output_data(mX, mY, mZ, mT, mFS, mFST, mAdd, mAddT);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -381,7 +416,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(time);
     // Copy data to output
-    output_data(mX, mY, mZ, mFS, mAdd);
+    if (flag) output_data(mX, mY, mZ, mFS, mAdd);
     // Pass read flag (for detecting EOF)
     return flag;
 }
@@ -398,7 +433,7 @@ bool ReadModes<VT>::get_data(
     // Read data
     auto flag = read_data(itime);
     // Copy data to output
-    output_data(mX, mY, mZ, mFS, mAdd);
+    if (flag) output_data(mX, mY, mZ, mFS, mAdd);
     // Pass read flag (for detecting EOF)
     return flag;
 }
