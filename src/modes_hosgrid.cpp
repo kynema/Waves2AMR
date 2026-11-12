@@ -1,4 +1,5 @@
 #include "modes_hosgrid.h"
+#include "nwt_reconstruction.h"
 #include "cmath"
 #include <iostream>
 
@@ -474,46 +475,8 @@ void modes_hosgrid::populate_hos_nwt_vel_nondim(
 
             // Get wavenumber and depth-related quantities
             const double k = sqrt(kx * kx + ky * ky);
-            const double kZ = k * (nd_z + 1.0);
-            // Get coefficients !!
-            double coeff = 1.0;
-            double coeff2 = 1.0;
-            if (ix == 0) {
-                // Do nothing for ix = 0, iy = 0
-                if (iy != 0) {
-                    // Modified coeffs for iy = 0, ix > 0
-                    if ((kZ < 50.0) && (k < 50.0)) {
-                        coeff = exp(k * nd_z) * (1.0 + exp(-2.0 * kZ)) /
-                                (1.0 + exp(-2.0 * k));
-                        coeff2 = exp(k * nd_z) * (1.0 - exp(-2.0 * kZ)) /
-                                 (1.0 - exp(-2.0 * k));
-                    } else {
-                        coeff = exp(kZ);
-                        coeff2 = coeff;
-                    }
-                    if (coeff >= 3.0) {
-                        coeff = 3.0;
-                    }
-                    if (coeff2 >= 3.0) {
-                        coeff2 = 3.0;
-                    }
-                }
-            } else {
-                // Ordinary coefficients for other cases
-                if ((kZ < 50.0) && (k < 50.0)) {
-                    coeff = cosh(kZ) / cosh(k);
-                    coeff2 = sinh(kZ) / sinh(k);
-                } else {
-                    coeff = exp(k * nd_z);
-                    coeff2 = coeff;
-                }
-                if (coeff >= 3.0) {
-                    coeff = 3.0;
-                }
-                if (coeff2 >= 3.0) {
-                    coeff2 = 3.0;
-                }
-            }
+            const auto [coeff, coeff2] =
+                nwt_depth_factors(k, nd_z, ix == 0, ix == 0 && iy == 0);
             // Multiply modes by coefficients
             // hosProcedure is velocity, I think
             const int idx = iy * n1 + ix;
@@ -549,21 +512,17 @@ void modes_hosgrid::populate_hos_nwt_vel_nondim(
         out_work.data()); // cos, cos
 }
 
-void modes_hosgrid::populate_additional_hos_nwt_vel_nondim(
+void modes_hosgrid::nwt_additional_coefficients(
     const int n0,
-    const int n1,
     const int n_add,
     const double nd_xlen,
     const double nd_ylen,
+    const double nd_x,
     const double nd_z,
     const std::vector<double>& add_modes_vec,
-    const std::vector<fftw_plan>& p_vector,
     double* x_modes,
     double* y_modes,
-    double* z_modes,
-    amrex::Vector<amrex::Real>& nwt_u,
-    amrex::Vector<amrex::Real>& nwt_v,
-    amrex::Vector<amrex::Real>& nwt_w)
+    double* z_modes)
 {
 
     // Reused constants
@@ -578,16 +537,6 @@ void modes_hosgrid::populate_additional_hos_nwt_vel_nondim(
     const double pi_xlen_add = M_PI / xlen_add;
     // lines 692-696
     const double pi_ylen = (n0 == 1) ? 0.0 : M_PI / nd_ylen;
-    // Output pointer
-    amrex::Vector<amrex::Real> out_u(n0, 0.0);
-    amrex::Vector<amrex::Real> out_v(n0, 0.0);
-    amrex::Vector<amrex::Real> out_w(n0, 0.0);
-    amrex::Vector<amrex::Real> work_modes(n0, 0.0);
-    amrex::Vector<amrex::Real> out_work(n0, 0.0);
-    // Loop modes to modify them
-    for (int ix = 0; ix < n1; ++ix) {
-        // Grid2Grid hosNWTMesh.inc, lines 62, 66
-        const double nd_x = ix * (nd_xlen / (n1 - 1.));
         for (int iy = 0; iy < n0; ++iy) {
             // line 699, fortran index conversion
             const double ky = pi_ylen * iy;
@@ -657,7 +606,30 @@ void modes_hosgrid::populate_additional_hos_nwt_vel_nondim(
                 z_modes[iy] -= add_modes_vec[idx] * coeff2;
             }
         }
+}
 
+void modes_hosgrid::populate_additional_hos_nwt_vel_nondim(
+    const int n0,
+    const int n1,
+    const int n_add,
+    const double nd_xlen,
+    const double nd_ylen,
+    const double nd_z,
+    const std::vector<double>& add_modes_vec,
+    const std::vector<fftw_plan>& p_vector,
+    double* x_modes,
+    double* y_modes,
+    double* z_modes,
+    amrex::Vector<amrex::Real>& nwt_u,
+    amrex::Vector<amrex::Real>& nwt_v,
+    amrex::Vector<amrex::Real>& nwt_w)
+{
+    amrex::Vector<amrex::Real> out_u(n0), out_v(n0), out_w(n0);
+    amrex::Vector<amrex::Real> work_modes(n0), out_work(n0);
+    for (int ix = 0; ix < n1; ++ix) {
+        nwt_additional_coefficients(
+            n0, n_add, nd_xlen, nd_ylen, ix * (nd_xlen / (n1 - 1.)), nd_z,
+            add_modes_vec, x_modes, y_modes, z_modes);
         // Perform inverse ffts
         if (n0 > 1) {
             do_ifftw(

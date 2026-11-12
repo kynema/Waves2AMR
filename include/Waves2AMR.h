@@ -7,5 +7,6 @@
 #include "interp_to_mfab.h"
 #include "velocity_stream.h"
 #include "ocean_reconstruction.h"
+#include "nwt_reconstruction.h"
 
 #endif

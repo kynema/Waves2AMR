@@ -18,7 +18,8 @@ the padded dimensions, and interpolate using the correspondingly smaller
 spacings. Retain the original reader dimensions for subsequent reads.
 The helper preserves HOS normalization, relocates negative frequencies,
 splits even-grid Nyquist modes, and leaves newly introduced modes zero.
-It does not add wave content. HOS-NWT transforms are unchanged.
+It does not add wave content. HOS-NWT uses the endpoint-aware path below,
+not `pad_ocean_modes`.
 
 Padding reduces subsequent interpolation loss but does not eliminate
 interpolation or levelset/VOF reconstruction error. Memory scales with padded
@@ -82,6 +83,39 @@ fails explicitly. An empty request performs no FFT.
 using the same depth-factor helper as the original velocity reconstruction.
 It preserves that routine's existing first/second-dimension length convention.
 
+### HOS-NWT reconstruction
+
+`nwt_fft_dimensions(ny, nx, ly, lx, dy, dx, cap)` applies the same padding
+controls to NWT. Its grids include both tank endpoints: doubling the number
+of intervals changes `n` samples to `2*(n-1)+1`, not `2*n`. A single transverse
+row remains one row, irrespective of SGF's transverse resolution.
+
+`NwtReconstruction(source_ny, source_nx, ny, nx, options)` accepts the original
+real NWT coefficients. `evaluate(modes, cos_y, cos_x, xs, ys, reserved_bytes)`
+returns a row-major Cartesian product of requested endpoint-grid nodes.
+It represents the cosine/sine basis through even/odd reflection and reuses
+the compact full/pruned/automatic FFT backend. Endpoint cosine amplitudes are
+preserved when padding; endpoint sine modes remain absent, as in DST-I.
+The internal periodic extension is `2*(n-1)` per nontrivial axis, so a full
+transform can use more workspace than a native real-to-real transform.
+Automatic selection times these available methods; it does not compare
+against the legacy DCT/DST implementation. No direct Fourier evaluation at
+solver coordinates is introduced.
+
+`velocity` applies the original NWT depth factors and dimensionalization,
+including the NWT coefficient cap of 3 (not Ocean's different caps). It also
+retains the additional wavemaker modes. Their nonperiodic x dependence is
+evaluated only at requested reconstruction-grid x nodes; their y dependence
+uses padded cosine/sine FFTs, one x column at a time. These terms cannot be
+zero-padded as if they were periodic x modes. They use full 1D y transforms
+even when `pruned` is selected for the ordinary wave modes.
+
+The shared scratch budget includes the reflected compact coefficients,
+depth arrays, local returned samples and wavemaker FFT buffers, plus caller
+reservations. The same exclusions and rank-local method selection apply.
+Inputs and reader dimensions remain unchanged. With padding disabled, results
+match the legacy transforms to roundoff, not necessarily bitwise.
+
 ## Streaming velocity reconstruction
 
 `interp_to_mfab::stream_velocity_to_field` reconstructs velocities directly into
@@ -117,7 +151,7 @@ fills three arrays over their Cartesian product. `local_eta_to_levelset_field`
 provides the analogous elevation path. Both paths use the same horizontal
 stencil calculation and interpolation selector.
 
-Kynema-SGF uses compact local reconstruction for HOS-Ocean elevation and streamed
+Kynema-SGF uses compact local reconstruction for both HOS-Ocean and HOS-NWT elevation and streamed
 velocity, including initialization after boxes exist. Its budget also accounts
 for the three local velocity arrays, local stencils, device index maps and
 compact depth coefficients. Initialization processes each level separately.
@@ -125,8 +159,8 @@ Compact input modes remain replicated per rank; no distributed FFT is used.
 Fragmented boxes may have a Cartesian-product footprint larger than the exact
 union of requested points. Cubic support can require more FFT nodes and heights
 than linear, so smaller local stencils do not guarantee lower total memory or
-runtime. HOS-NWT retains its existing Fourier reconstruction path but uses the
-same default-cubic interpolation.
+runtime. Both source types defer spatial reconstruction until boxes exist and
+avoid storing full horizontal planes at every interpolation height.
 
 Build and run the focused tests:
 

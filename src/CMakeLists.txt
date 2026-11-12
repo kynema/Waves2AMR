@@ -21,4 +21,6 @@ target_sources(
    velocity_stream.cpp
    ocean_reconstruction.h
    ocean_reconstruction.cpp
+   nwt_reconstruction.h
+   nwt_reconstruction.cpp
    )
