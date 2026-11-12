@@ -7,7 +7,13 @@
 
 namespace {
 
-void compare_stream(bool periodic, bool subset, int ny = 6, bool local = false)
+void compare_stream(
+    bool periodic,
+    bool subset,
+    int ny = 6,
+    bool local = false,
+    interp_to_mfab::Interpolation interpolation =
+        interp_to_mfab::Interpolation::linear)
 {
     const int nx = 8;
     amrex::Vector<amrex::Real> heights{2., 1.25, 0., -1., -3.};
@@ -57,7 +63,7 @@ void compare_stream(bool periodic, bool subset, int ny = 6, bool local = false)
     for (int lev = 0; lev < expected.size(); ++lev) {
         interp_to_mfab::interp_velocity_to_multifab(
             nx, ny, 1., ny == 1 ? 0. : 1., .3, -.7, periodic, indices, heights,
-            u, v, w, *expected[lev], problo[lev], dx[lev]);
+            u, v, w, *expected[lev], problo[lev], dx[lev], interpolation);
     }
     std::vector<int> calls;
     interp_to_mfab::LocalVelocityPlaneReader local_reader;
@@ -102,10 +108,14 @@ void compare_stream(bool periodic, bool subset, int ny = 6, bool local = false)
                 amrex::Gpu::deviceToDevice, w.begin() + offset,
                 w.begin() + offset + plane, sw.begin());
         },
-        local_reader);
+        local_reader, interpolation);
     EXPECT_LE(memory.plane_bytes, 3 * plane * sizeof(amrex::Real));
     EXPECT_EQ(
-        memory.stencil_bytes, 24 * horizontal_cells * sizeof(amrex::Real));
+        memory.stencil_bytes,
+        (interpolation == interp_to_mfab::Interpolation::linear
+             ? 24
+             : 3 * std::min<std::size_t>(4, indices.size())) *
+            horizontal_cells * sizeof(amrex::Real));
     EXPECT_EQ(calls, std::vector<int>(indices.begin(), indices.end()));
     for (int lev = 0; lev < expected.size(); ++lev) {
         amrex::MultiFab::Subtract(*actual[lev], *expected[lev], 0, 0, 3, 2);
@@ -141,6 +151,13 @@ TEST(VelocityStream, LocalSamplesMatchGlobalPlanes)
     compare_stream(true, false, 6, true);
     compare_stream(false, true, 6, true);
     compare_stream(true, false, 1, true);
+}
+
+TEST(VelocityStream, CubicGhostsMultipleLevelsAndSelectedHeights)
+{
+    compare_stream(true, false, 6, true, interp_to_mfab::Interpolation::cubic);
+    compare_stream(false, true, 6, true, interp_to_mfab::Interpolation::cubic);
+    compare_stream(true, true, 1, true, interp_to_mfab::Interpolation::cubic);
 }
 
 TEST(VelocityStream, LocalElevationMatchesGlobalPlane)
@@ -210,7 +227,7 @@ TEST(VelocityStream, ScratchMemoryDoesNotGrowWithHeightCount)
             EXPECT_EQ(total, bytes);
         }
         bytes = total;
-        EXPECT_LE(calls, 8);
+        EXPECT_EQ(calls, count == 10 ? 6 : 9);
         EXPECT_LT(total, 3 * 32 * 32 * count * sizeof(amrex::Real));
     }
 }

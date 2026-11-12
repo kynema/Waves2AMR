@@ -471,7 +471,8 @@ TEST_F(InterpToMFabTest, interp_velocity_to_multifab) {
   const bool is_periodic{true};
   interp_to_mfab::interp_velocity_to_field(
       spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic, indvec,
-      hvec, uvec, vvec, wvec, field_fabs, problo, dx);
+      hvec, uvec, vvec, wvec, field_fabs, problo, dx,
+      interp_to_mfab::Interpolation::linear);
   // Check sum
   const amrex::Real mf_sum_u = sum_multifab(*field_fabs[0], 0);
   const amrex::Real mf_sum_v = sum_multifab(*field_fabs[0], 1);
@@ -548,7 +549,8 @@ TEST_F(InterpToMFabTest, interp_velocity_to_multifab_modindices) {
   const bool is_periodic{true};
   interp_to_mfab::interp_velocity_to_field(
       spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic, indvec,
-      hvec, uvec, vvec, wvec, field_fabs, problo, dx);
+      hvec, uvec, vvec, wvec, field_fabs, problo, dx,
+      interp_to_mfab::Interpolation::linear);
   // Check sum
   const amrex::Real mf_sum_u = sum_multifab(*field_fabs[0], 0);
   const amrex::Real mf_sum_v = sum_multifab(*field_fabs[0], 1);
@@ -619,7 +621,8 @@ TEST_F(InterpToMFabTest, interp_velocity_to_multifab_lateral) {
   const bool is_periodic{true};
   interp_to_mfab::interp_velocity_to_field(
       spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic, indvec,
-      hvec, uvec, vvec, wvec, field_fabs, problo, dx);
+      hvec, uvec, vvec, wvec, field_fabs, problo, dx,
+      interp_to_mfab::Interpolation::linear);
   // Check error directly
   const amrex::Real error = error_velocity(mf, nz);
   EXPECT_NEAR(error, 0.0, 1e-8);
@@ -677,7 +680,8 @@ TEST_F(InterpToMFabTest, interp_velocity_to_multifab_lateral_shift) {
   const bool is_periodic{true};
   interp_to_mfab::interp_velocity_to_field(
       spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic, indvec,
-      hvec, uvec, vvec, wvec, field_fabs, problo, dx);
+      hvec, uvec, vvec, wvec, field_fabs, problo, dx,
+      interp_to_mfab::Interpolation::linear);
   // Check error directly
   const amrex::Real error = error_velocity(mf, nz);
   EXPECT_NEAR(error, 0.0, 1e-8);

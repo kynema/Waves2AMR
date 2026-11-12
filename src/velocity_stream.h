@@ -2,6 +2,7 @@
 #define VELOCITY_STREAM_H
 
 #include "AMReX_MultiFab.H"
+#include "interpolation_stencil.h"
 #include <cstddef>
 #include <functional>
 #include <vector>
@@ -34,7 +35,8 @@ struct VelocityStreamMemory
 };
 
 // The reader fills one full FFT plane per component at the requested height
-// index. Only two local horizontal interpolation stencils are retained.
+// index. Cubic retains four horizontally interpolated local planes; linear
+// retains two sets of raw corners for exact compatibility.
 VelocityStreamMemory stream_velocity_to_field(
     int nx,
     int ny,
@@ -49,7 +51,8 @@ VelocityStreamMemory stream_velocity_to_field(
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
     const VelocityPlaneReader& read_plane,
-    const LocalVelocityPlaneReader& read_local_plane = {});
+    const LocalVelocityPlaneReader& read_local_plane = {},
+    Interpolation interpolation = Interpolation::cubic);
 
 void local_eta_to_levelset_field(
     int nx,
@@ -63,7 +66,8 @@ void local_eta_to_levelset_field(
     const amrex::Vector<amrex::MultiFab*>& fields,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
-    const LocalElevationReader& read);
+    const LocalElevationReader& read,
+    Interpolation interpolation = Interpolation::cubic);
 
 } // namespace interp_to_mfab
 

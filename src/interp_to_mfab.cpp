@@ -1,4 +1,5 @@
 #include "interp_to_mfab.h"
+#include "velocity_stream.h"
 #include "AMReX_Gpu.H"
 #include <limits>
 
@@ -383,7 +384,8 @@ void interp_to_mfab::interp_eta_to_levelset_field(
     const bool is_periodic,
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     const amrex::Vector<amrex::MultiFab*>& lsfield,
-    const amrex::Vector<amrex::Geometry>& geom)
+    const amrex::Vector<amrex::Geometry>& geom,
+    Interpolation interpolation)
 {
 
     // Number of levels
@@ -397,7 +399,7 @@ void interp_to_mfab::interp_eta_to_levelset_field(
 
         interp_eta_to_levelset_multifab(
             spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, zsl, is_periodic,
-            etavec, lslev, problo, dx);
+            etavec, lslev, problo, dx, interpolation);
     }
 }
 
@@ -416,7 +418,8 @@ void interp_to_mfab::interp_eta_to_levelset_field(
     const amrex::Vector<amrex::MultiFab*>& lsfield,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
         problo_vec,
-    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec,
+    Interpolation interpolation)
 {
 
     // Number of levels
@@ -430,7 +433,7 @@ void interp_to_mfab::interp_eta_to_levelset_field(
 
         interp_eta_to_levelset_multifab(
             spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, zsl, is_periodic,
-            etavec, lslev, problo, dx);
+            etavec, lslev, problo, dx, interpolation);
     }
 }
 
@@ -449,7 +452,8 @@ void interp_to_mfab::interp_velocity_to_field(
     const amrex::Gpu::DeviceVector<amrex::Real>& vvec,
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     const amrex::Vector<amrex::MultiFab*>& vfield,
-    const amrex::Vector<amrex::Geometry>& geom)
+    const amrex::Vector<amrex::Geometry>& geom,
+    Interpolation interpolation)
 {
 
     // Number of levels
@@ -472,7 +476,7 @@ void interp_to_mfab::interp_velocity_to_field(
         // Interpolate velocity for each multifab
         interp_velocity_to_multifab(
             spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic,
-            indvec, hvec, uvec, vvec, wvec, vlev, problo, dx);
+            indvec, hvec, uvec, vvec, wvec, vlev, problo, dx, interpolation);
     }
 }
 
@@ -493,7 +497,8 @@ void interp_to_mfab::interp_velocity_to_field(
     const amrex::Vector<amrex::MultiFab*>& vfield,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
         problo_vec,
-    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec)
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec,
+    Interpolation interpolation)
 {
 
     // Number of levels
@@ -516,7 +521,7 @@ void interp_to_mfab::interp_velocity_to_field(
         // Interpolate velocity for each multifab
         interp_velocity_to_multifab(
             spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic,
-            indvec, hvec, uvec, vvec, wvec, vlev, problo, dx);
+            indvec, hvec, uvec, vvec, wvec, vlev, problo, dx, interpolation);
     }
 }
 
@@ -533,17 +538,44 @@ void interp_to_mfab::interp_eta_to_levelset_multifab(
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation)
 {
+    if (interpolation == Interpolation::cubic) {
+        local_eta_to_levelset_field(
+            spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, zsl, is_periodic,
+            {&lsfab}, {problo}, {dx},
+            [&](const auto& xs, const auto& ys, auto& output) {
+                amrex::Gpu::DeviceVector<int> xd(xs.size()), yd(ys.size());
+                amrex::Gpu::copy(
+                    amrex::Gpu::hostToDevice, xs.begin(), xs.end(), xd.begin());
+                amrex::Gpu::copy(
+                    amrex::Gpu::hostToDevice, ys.begin(), ys.end(), yd.begin());
+                const auto* xp = xd.data();
+                const auto* yp = yd.data();
+                const auto* input = etavec.data();
+                auto* values = output.data();
+                const int width = xs.size();
+                amrex::ParallelFor(
+                    static_cast<int>(output.size()),
+                    [=] AMREX_GPU_DEVICE(int n) {
+                        values[n] =
+                            input[xp[n % width] + yp[n / width] * spd_nx];
+                    });
+                amrex::Gpu::streamSynchronize();
+            },
+            interpolation);
+        return;
+    }
 
     if (spd_ny == 1) {
         interp_to_mfab::interp_eta_to_levelset_multifab2D(
             spd_nx, spd_dx, spd_xlo, zsl, is_periodic, etavec, lsfab, problo,
-            dx);
+            dx, interpolation);
     } else {
         interp_to_mfab::interp_eta_to_levelset_multifab3D(
             spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, zsl, is_periodic,
-            etavec, lsfab, problo, dx);
+            etavec, lsfab, problo, dx, interpolation);
     }
 }
 
@@ -563,17 +595,41 @@ void interp_to_mfab::interp_velocity_to_multifab(
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation)
 {
+    if (interpolation == Interpolation::cubic) {
+        const auto plane = static_cast<std::size_t>(spd_nx) * spd_ny;
+        AMREX_ALWAYS_ASSERT(
+            !indvec.empty() && uvec.size() == plane * indvec.size() &&
+            vvec.size() == uvec.size() && wvec.size() == uvec.size());
+        stream_velocity_to_field(
+            spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic,
+            indvec, hvec, {&vfab}, {problo}, {dx},
+            [&](int height, auto& u, auto& v, auto& w) {
+                const auto offset = (height - indvec.front()) * plane;
+                amrex::Gpu::copy(
+                    amrex::Gpu::deviceToDevice, uvec.begin() + offset,
+                    uvec.begin() + offset + plane, u.begin());
+                amrex::Gpu::copy(
+                    amrex::Gpu::deviceToDevice, vvec.begin() + offset,
+                    vvec.begin() + offset + plane, v.begin());
+                amrex::Gpu::copy(
+                    amrex::Gpu::deviceToDevice, wvec.begin() + offset,
+                    wvec.begin() + offset + plane, w.begin());
+            },
+            {}, interpolation);
+        return;
+    }
 
     if (spd_ny == 1) {
         interp_to_mfab::interp_velocity_to_multifab2D(
             spd_nx, spd_dx, spd_xlo, is_periodic, indvec, hvec, uvec, wvec,
-            vfab, problo, dx);
+            vfab, problo, dx, interpolation);
     } else {
         interp_to_mfab::interp_velocity_to_multifab3D(
             spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic,
-            indvec, hvec, uvec, vvec, wvec, vfab, problo, dx);
+            indvec, hvec, uvec, vvec, wvec, vfab, problo, dx, interpolation);
     }
 }
 
@@ -590,8 +646,15 @@ void interp_to_mfab::interp_eta_to_levelset_multifab3D(
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation)
 {
+    if (interpolation == Interpolation::cubic) {
+        interp_eta_to_levelset_multifab(
+            spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, zsl, is_periodic,
+            etavec, lsfab, problo, dx, interpolation);
+        return;
+    }
 
     // Get pointer to device vector
     const auto* etavec_ptr = etavec.data();
@@ -689,8 +752,15 @@ void interp_to_mfab::interp_velocity_to_multifab3D(
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation)
 {
+    if (interpolation == Interpolation::cubic) {
+        interp_velocity_to_multifab(
+            spd_nx, spd_ny, spd_dx, spd_dy, spd_xlo, spd_ylo, is_periodic,
+            indvec, hvec, uvec, vvec, wvec, vfab, problo, dx, interpolation);
+        return;
+    }
     // Number of heights relevant to this processor
     const int nhts = indvec.size();
     // Copy hvec and indvec to device
@@ -857,8 +927,15 @@ void interp_to_mfab::interp_eta_to_levelset_multifab2D(
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation)
 {
+    if (interpolation == Interpolation::cubic) {
+        interp_eta_to_levelset_multifab(
+            spd_nx, 1, spd_dx, 0., spd_xlo, 0., zsl, is_periodic, etavec, lsfab,
+            problo, dx, interpolation);
+        return;
+    }
 
     // Get pointer to device vector
     const auto* etavec_ptr = etavec.data();
@@ -921,8 +998,16 @@ void interp_to_mfab::interp_velocity_to_multifab2D(
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx)
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation)
 {
+    if (interpolation == Interpolation::cubic) {
+        // The middle component is ignored for single-row spatial data.
+        interp_velocity_to_multifab(
+            spd_nx, 1, spd_dx, 0., spd_xlo, 0., is_periodic, indvec, hvec, uvec,
+            uvec, wvec, vfab, problo, dx, interpolation);
+        return;
+    }
     // Number of heights relevant to this processor
     const int nhts = indvec.size();
     // Copy hvec and indvec to device

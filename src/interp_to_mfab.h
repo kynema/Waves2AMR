@@ -1,6 +1,7 @@
 #ifndef INTERP_TO_MFAB_H
 #define INTERP_TO_MFAB_H
 #include "AMReX_MultiFab.H"
+#include "interpolation_stencil.h"
 
 namespace interp_to_mfab {
 
@@ -109,7 +110,8 @@ void interp_eta_to_levelset_field(
     const bool is_periodic,
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     const amrex::Vector<amrex::MultiFab*>& lsfield,
-    const amrex::Vector<amrex::Geometry>& geom);
+    const amrex::Vector<amrex::Geometry>& geom,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_eta_to_levelset_field(
     const int spd_nx,
@@ -124,7 +126,8 @@ void interp_eta_to_levelset_field(
     const amrex::Vector<amrex::MultiFab*>& lsfield,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
         problo_vec,
-    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec);
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_velocity_to_field(
     const int spd_nx,
@@ -140,7 +143,8 @@ void interp_velocity_to_field(
     const amrex::Gpu::DeviceVector<amrex::Real>& vvec,
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     const amrex::Vector<amrex::MultiFab*>& vfield,
-    const amrex::Vector<amrex::Geometry>& geom);
+    const amrex::Vector<amrex::Geometry>& geom,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_velocity_to_field(
     const int spd_nx,
@@ -158,7 +162,8 @@ void interp_velocity_to_field(
     const amrex::Vector<amrex::MultiFab*>& vfield,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>&
         problo_vec,
-    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec);
+    const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx_vec,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_eta_to_levelset_multifab(
     const int spd_nx,
@@ -172,7 +177,8 @@ void interp_eta_to_levelset_multifab(
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx);
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_velocity_to_multifab(
     const int spd_nx,
@@ -189,7 +195,8 @@ void interp_velocity_to_multifab(
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx);
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_eta_to_levelset_multifab3D(
     const int spd_nx,
@@ -203,7 +210,8 @@ void interp_eta_to_levelset_multifab3D(
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx);
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_velocity_to_multifab3D(
     const int spd_nx,
@@ -220,7 +228,8 @@ void interp_velocity_to_multifab3D(
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx);
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_eta_to_levelset_multifab2D(
     const int spd_nx,
@@ -231,7 +240,8 @@ void interp_eta_to_levelset_multifab2D(
     const amrex::Gpu::DeviceVector<amrex::Real>& etavec,
     amrex::MultiFab& lsfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx);
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation = Interpolation::cubic);
 
 void interp_velocity_to_multifab2D(
     const int spd_nx,
@@ -244,7 +254,8 @@ void interp_velocity_to_multifab2D(
     const amrex::Gpu::DeviceVector<amrex::Real>& wvec,
     amrex::MultiFab& vfab,
     const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& problo,
-    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx);
+    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dx,
+    Interpolation interpolation = Interpolation::cubic);
 
 AMREX_GPU_HOST_DEVICE amrex::Real linear_interp(
     const amrex::Real a000,

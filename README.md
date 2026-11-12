@@ -20,9 +20,29 @@ The helper preserves HOS normalization, relocates negative frequencies,
 splits even-grid Nyquist modes, and leaves newly introduced modes zero.
 It does not add wave content. HOS-NWT transforms are unchanged.
 
-Padding reduces subsequent linear interpolation loss but does not eliminate
+Padding reduces subsequent interpolation loss but does not eliminate
 interpolation or levelset/VOF reconstruction error. Memory scales with padded
 grid area.
+
+## Cubic interpolation
+
+The elevation and velocity interpolation APIs default to
+`interp_to_mfab::Interpolation::cubic` for both HOS-Ocean and HOS-NWT.
+They interpolate reconstructed Fourier-grid values, not the Fourier series
+directly at destination coordinates. Horizontal interpolation is tensor-product
+four-point Lagrange (bicubic for 3D sources); velocity uses four adjacent,
+potentially nonuniform heights for cubic vertical interpolation.
+Pass `Interpolation::linear` as the final argument for legacy interpolation.
+Kynema-SGF exposes this choice as `OceanWaves.<label>.interpolation = cubic|linear`.
+
+Periodic horizontal stencils wrap; nonperiodic coordinates clamp to the actual
+sample extent `[0, (n-1)*spacing]` and use one-sided stencils at boundaries.
+This endpoint policy intentionally differs from legacy linear interpolation.
+Axes with fewer than four samples reduce polynomial degree. Vertical stencils
+are one-sided near endpoints; outside the supplied height range, velocity
+retains linear extrapolation and the existing above-top zeroing rule.
+These are interpolating polynomials, not monotonicity-limited schemes:
+overshoot is possible, particularly near nonsmooth data.
 
 ## Compact local reconstruction
 
@@ -70,14 +90,18 @@ Pass the same descending height vector and contiguous height indices as the
 existing interpolator. The callback receives a height index and three
 single-plane device vectors; fill them with `populate_hos_vel` at that height,
 using the default zero spatial offset. Geometry arrays must contain one entry
-per supplied field. Periodic and nonperiodic interpolation, including
-single-row (2D) source grids, follow the existing interpolation arithmetic.
+per supplied field. Include cubic support heights in the contiguous index range:
+expand the legacy bracketing range by two heights at each end, clipped to the
+height vector. Fewer supplied heights reduce order.
 
-The original callback reconstructs only heights needed by local boxes. It holds three
-full horizontal velocity planes and two local sets of four-corner samples for
-each velocity component. Spatial scratch storage is therefore
-`sizeof(Real) * (3 * nx * ny + 24 * local_horizontal_cells)`, independent of the
-number of heights. Here `local_horizontal_cells` sums grown-box horizontal
+The original callback reconstructs only heights needed by local boxes. It holds
+three full horizontal velocity planes. Cubic interpolation immediately reduces
+each plane to local horizontal samples and retains four heights for each of
+three components. Linear mode retains two sets of four corners per component
+to preserve its arithmetic. Spatial scratch storage is therefore
+`sizeof(Real) * (3 * nx * ny + s * local_horizontal_cells)`, where `s` is
+12 for cubic (with four available heights), or 24 for linear, independent of the
+total number of heights. Here `local_horizontal_cells` sums grown-box horizontal
 areas across local boxes and levels, including vertically stacked boxes.
 For small source grids or many stacked boxes, local stencil storage can exceed
 the old volume storage; the benefit grows with padded FFT area and height count.
@@ -86,11 +110,12 @@ FFT plans/workspace, spectral vectors, elevation, and destination fields.
 An empty local mesh performs no reconstructions.
 
 Alternatively, pass an empty original callback and a `LocalVelocityPlaneReader`
-as the final argument. This callback receives the height and sorted unique
+as the local-reader argument, before the optional interpolation selector.
+This callback receives the height and sorted unique
 `xs, ys` needed by all local boxes, including ghosts and periodic seams, and
 fills three arrays over their Cartesian product. `local_eta_to_levelset_field`
 provides the analogous elevation path. Both paths use the same horizontal
-stencil calculation and existing interpolation arithmetic.
+stencil calculation and interpolation selector.
 
 Kynema-SGF uses compact local reconstruction for HOS-Ocean elevation and streamed
 velocity, including initialization after boxes exist. Its budget also accounts
@@ -98,7 +123,10 @@ for the three local velocity arrays, local stencils, device index maps and
 compact depth coefficients. Initialization processes each level separately.
 Compact input modes remain replicated per rank; no distributed FFT is used.
 Fragmented boxes may have a Cartesian-product footprint larger than the exact
-union of requested points. HOS-NWT retains its existing reconstruction path.
+union of requested points. Cubic support can require more FFT nodes and heights
+than linear, so smaller local stencils do not guarantee lower total memory or
+runtime. HOS-NWT retains its existing Fourier reconstruction path but uses the
+same default-cubic interpolation.
 
 Build and run the focused tests:
 
