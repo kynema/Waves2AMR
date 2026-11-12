@@ -16,4 +16,6 @@ target_sources(
    ocean_padding.cpp
    interp_to_mfab.h
    interp_to_mfab.cpp
+   velocity_stream.h
+   velocity_stream.cpp
    )
