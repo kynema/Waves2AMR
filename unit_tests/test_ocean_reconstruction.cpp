@@ -171,3 +171,73 @@ TEST(OceanReconstruction, CompactDepthCoefficientsMatchPaddedVelocity)
     delete[] out;
 }
 } // namespace
+
+namespace {
+TEST(OceanReconstruction, VelocityDepthProfileUsesNonSquareWavenumbers)
+{
+    // Rows are y and compact columns are x; Lx != Ly exposes a length swap
+    const int sy = 6, sx = 8;
+    const double xlen = 40., ylen = 10., depth = 7., zsl = 1., dimL = 2.,
+                 dimT = 3.;
+    std::vector<std::complex<double>> m(sy * (sx / 2 + 1)), um, vm, wm;
+    for (std::size_t n = 0; n < m.size(); ++n)
+        m[n] = {0.1 * n + 0.3, 0.05 - 0.02 * n};
+    for (double z : {-5., -2., 0.5}) {
+        modes_hosgrid::ocean_velocity_modes(
+            sy, sx, xlen, ylen, depth, z, zsl, dimL, dimT, m, m, m, um, vm, wm);
+        const double h = depth / dimL, zn = (z - zsl) / dimL;
+        for (int j = 0; j < sy; ++j)
+            for (int i = 0; i <= sx / 2; ++i) {
+                if (i == 0 && j == 0) continue;
+                const auto n = j * (sx / 2 + 1) + i;
+                const double kx = 2. * M_PI * i / (xlen / dimL);
+                const double ky =
+                    2. * M_PI * (j <= sy / 2 ? j : j - sy) / (ylen / dimL);
+                const double k = std::hypot(kx, ky);
+                const double a = std::cosh(k * (zn + h)) / std::cosh(k * h);
+                const double b = std::sinh(k * (zn + h)) / std::sinh(k * h);
+                const auto scale = m[n] * (dimL / dimT);
+                EXPECT_NEAR(std::abs(um[n] - a * scale), 0., 1e-12)
+                    << "j " << j << " i " << i << " z " << z;
+                EXPECT_NEAR(std::abs(vm[n] - a * scale), 0., 1e-12);
+                EXPECT_NEAR(std::abs(wm[n] - b * scale), 0., 1e-12);
+            }
+    }
+}
+
+TEST(OceanReconstruction, VelocityRateModesUseHosWavenumbers)
+{
+    const int sy = 5, sx = 6;
+    const double xlen = 40., ylen = 25., depth = 7., dimL = 2.;
+    std::vector<std::complex<double>> mt(sy * (sx / 2 + 1)), xt, yt, zt;
+    for (std::size_t n = 0; n < mt.size(); ++n)
+        mt[n] = {0.1 * n + 0.3, 0.05 - 0.02 * n};
+    modes_hosgrid::ocean_velocity_rate_modes(
+        sy, sx, xlen, ylen, depth, dimL, mt, xt, yt, zt);
+    ASSERT_EQ(xt.size(), mt.size());
+    for (int j = 0; j < sy; ++j)
+        for (int i = 0; i <= sx / 2; ++i) {
+            const auto n = j * (sx / 2 + 1) + i;
+            const double kx = 2. * M_PI * i / (xlen / dimL);
+            const double ky =
+                2. * M_PI * (j <= sy / 2 ? j : j - sy) / (ylen / dimL);
+            const double k = std::hypot(kx, ky);
+            EXPECT_NEAR(
+                std::abs(xt[n] - std::complex<double>(0., kx) * mt[n]), 0.,
+                1e-14);
+            EXPECT_NEAR(
+                std::abs(yt[n] - std::complex<double>(0., ky) * mt[n]), 0.,
+                1e-14);
+            EXPECT_NEAR(
+                std::abs(zt[n] - k * std::tanh(k * depth / dimL) * mt[n]), 0.,
+                1e-13);
+        }
+    EXPECT_EQ(xt[0], std::complex<double>{});
+    EXPECT_EQ(zt[0], std::complex<double>{});
+    mt.pop_back();
+    EXPECT_THROW(
+        modes_hosgrid::ocean_velocity_rate_modes(
+            sy, sx, xlen, ylen, depth, dimL, mt, xt, yt, zt),
+        std::invalid_argument);
+}
+} // namespace

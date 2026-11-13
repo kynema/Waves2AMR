@@ -267,3 +267,32 @@ TEST(NwtReconstruction, PaddingImprovesOffGridCubicAccuracy)
     EXPECT_LT(finer, fine * .15);
 }
 } // namespace
+
+namespace {
+TEST(NwtReconstruction, VelocityRateModesUseCosineWavenumbers)
+{
+    for (int sy : {1, 4}) {
+        const int sx = 6;
+        const double xlen = 30., ylen = 12., dimL = 3.;
+        std::vector<double> mt(sy * sx), xt, yt, zt;
+        std::iota(mt.begin(), mt.end(), 0.5);
+        modes_hosgrid::nwt_velocity_rate_modes(
+            sy, sx, xlen, ylen, dimL, mt, xt, yt, zt);
+        for (int j = 0; j < sy; ++j)
+            for (int i = 0; i < sx; ++i) {
+                const auto n = j * sx + i;
+                const double kx = M_PI * i / (xlen / dimL);
+                const double ky = sy == 1 ? 0. : M_PI * j / (ylen / dimL);
+                const double k = std::hypot(kx, ky);
+                EXPECT_NEAR(xt[n], -kx * mt[n], 1e-13);
+                EXPECT_NEAR(yt[n], -ky * mt[n], 1e-13);
+                EXPECT_NEAR(zt[n], k * std::tanh(k) * mt[n], 1e-12);
+            }
+        mt.pop_back();
+        EXPECT_THROW(
+            modes_hosgrid::nwt_velocity_rate_modes(
+                sy, sx, xlen, ylen, dimL, mt, xt, yt, zt),
+            std::invalid_argument);
+    }
+}
+} // namespace

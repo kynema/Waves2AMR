@@ -71,8 +71,18 @@ void compare_reads(const std::string& filename, bool ocean)
     const int n = full.get_vector_size(), na = full.get_addl_vector_size();
     std::vector<VT> x(n), y(n), z(n), t(n), fs(n), fst(n), add(na), addt(na);
     std::vector<VT> bx, by, bz, bfs, ba, dx, dy, dz, dfs, da;
+    std::vector<VT> rx, ry, rz, rfs, ra, rt, rfst, radd;
+    ReadModes<VT> rates(filename, ocean);
     for (int step : {2, -1, 0, 1, 2, 0}) {
         ASSERT_TRUE(full.get_data(step, x, y, z, t, fs, fst, add, addt));
+        ASSERT_TRUE(rates.read_into(
+            step, rx, ry, rz, rfs, ocean ? nullptr : &ra, &rt, &rfst,
+            ocean ? nullptr : &radd));
+        EXPECT_EQ(x, rx);
+        EXPECT_EQ(fs, rfs);
+        EXPECT_EQ(t, rt);
+        EXPECT_EQ(fst, rfst);
+        if (!ocean) EXPECT_EQ(addt, radd);
         ASSERT_TRUE(
             brief.read_into(step, bx, by, bz, bfs, ocean ? nullptr : &ba));
         ASSERT_TRUE(

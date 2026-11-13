@@ -160,10 +160,12 @@ bool ReadModes<VT>::read_into(
     std::vector<VT>& mY,
     std::vector<VT>& mZ,
     std::vector<VT>& mFS,
-    std::vector<VT>* mAdd)
+    std::vector<VT>* mAdd,
+    std::vector<VT>* mT,
+    std::vector<VT>* mFST,
+    std::vector<VT>* mAddT)
 {
-    return ascii_read_into(
-        itime, mX, mY, mZ, mFS, mAdd, nullptr, nullptr, nullptr);
+    return ascii_read_into(itime, mX, mY, mZ, mFS, mAdd, mT, mFST, mAddT);
 }
 
 // Version that uses stored index as guess and increments it

@@ -54,6 +54,8 @@ VelocityStreamMemory stream_velocity_to_field(
     const LocalVelocityPlaneReader& read_local_plane = {},
     Interpolation interpolation = Interpolation::cubic);
 
+// Writes eta + zsl - z, or only the interpolated eta (or a linear function of
+// it, such as deta/dt) when add_level_offset is false.
 void local_eta_to_levelset_field(
     int nx,
     int ny,
@@ -67,7 +69,8 @@ void local_eta_to_levelset_field(
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
     const LocalElevationReader& read,
-    Interpolation interpolation = Interpolation::cubic);
+    Interpolation interpolation = Interpolation::cubic,
+    bool add_level_offset = true);
 
 } // namespace interp_to_mfab
 

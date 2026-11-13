@@ -55,6 +55,21 @@ private:
 std::pair<double, double>
 nwt_depth_factors(double k, double z, bool first_column, bool zero_mode);
 
+// HOS-NWT velocity modes are (-kx, -ky, k tanh(k)) A for the cosine potential
+// modes A at z = 0, and the dphi/dt modes are dA/dt. Return the
+// nondimensional time derivatives of the velocity modes for use with
+// NwtReconstruction::velocity; the wavemaker rate modes are read directly.
+void nwt_velocity_rate_modes(
+    int source_ny,
+    int source_nx,
+    double xlen,
+    double ylen,
+    double dimL,
+    const std::vector<double>& mt,
+    std::vector<double>& mx_t,
+    std::vector<double>& my_t,
+    std::vector<double>& mz_t);
+
 // Wavemaker terms are nonperiodic in x, but cosine/sine modes in y.
 void nwt_additional_coefficients(
     int ny,

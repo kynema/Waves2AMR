@@ -192,6 +192,38 @@ TEST(VelocityStream, LocalElevationMatchesGlobalPlane)
                 });
             amrex::MultiFab::Subtract(actual, expected, 0, 0, 1, 1);
             EXPECT_EQ(actual.norm0(0, 1), 0.);
+            for (auto interpolation :
+                 {interp_to_mfab::Interpolation::linear,
+                  interp_to_mfab::Interpolation::cubic}) {
+                // Without the level offset, only the elevation is written.
+                amrex::MultiFab with(boxes, mapping, 1, 1),
+                    without(boxes, mapping, 1, 1);
+                auto read = [&](const auto& xs, const auto& ys, auto& output) {
+                    std::vector<amrex::Real> samples;
+                    for (int j : ys)
+                        for (int i : xs) samples.push_back(host[j * nx + i]);
+                    amrex::Gpu::copy(
+                        amrex::Gpu::hostToDevice, samples.begin(),
+                        samples.end(), output.begin());
+                };
+                interp_to_mfab::local_eta_to_levelset_field(
+                    nx, ny, 1., 1., 0., 0., 2., periodic, {&with},
+                    {{{0., 0., 0.}}}, {{{.5, .5, .5}}}, read, interpolation);
+                interp_to_mfab::local_eta_to_levelset_field(
+                    nx, ny, 1., 1., 0., 0., 2., periodic, {&without},
+                    {{{0., 0., 0.}}}, {{{.5, .5, .5}}}, read, interpolation,
+                    false);
+                for (amrex::MFIter mfi(with); mfi.isValid(); ++mfi) {
+                    const auto a = with.const_array(mfi);
+                    const auto b = without.const_array(mfi);
+                    amrex::LoopOnCpu(
+                        mfi.growntilebox(), [&](int i, int j, int k) {
+                            EXPECT_NEAR(
+                                a(i, j, k) - b(i, j, k), 2. - (k + .5) * .5,
+                                1e-14);
+                        });
+                }
+            }
         }
     }
 }

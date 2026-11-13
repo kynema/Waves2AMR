@@ -344,19 +344,19 @@ void modes_hosgrid::populate_hos_ocean_vel_nondim(
     const double twoPi_xlen = 2.0 * M_PI / nd_xlen;
     const double twoPi_ylen = 2.0 * M_PI / nd_ylen;
     // Loop modes to modify them
-    for (int ix = 0; ix < n0; ++ix) {
-        for (int iy = 0; iy < n1 / 2 + 1; ++iy) {
+    // HOS-Ocean stores y along rows (n0) and x along the compact columns
+    for (int iy = 0; iy < n0; ++iy) {
+        for (int ix = 0; ix < n1 / 2 + 1; ++ix) {
 
             // Get wavenumbers
-            const double kxN2 =
-                (double)(ix < n0 / 2 + 1 ? ix : ix - n0) * twoPi_xlen;
-            const double ky = (double)iy * twoPi_ylen;
-            const double k = sqrt(kxN2 * kxN2 + ky * ky);
+            const double ky =
+                (double)(iy < n0 / 2 + 1 ? iy : iy - n0) * twoPi_ylen;
+            const double kx = (double)ix * twoPi_xlen;
+            const double k = sqrt(kx * kx + ky * ky);
             const auto [coeff, coeff2] = ocean_depth_factors(
-                k, nd_depth, nd_z, iy == 0, ix == 0 && iy == 0);
+                k, nd_depth, nd_z, ix == 0, ix == 0 && iy == 0);
             // Multiply modes by coefficients
-            // hosProcedure is velocity, I think
-            const int idx = ix * (n1 / 2 + 1) + iy;
+            const int idx = iy * (n1 / 2 + 1) + ix;
             (x_modes[idx])[0] = coeff * mX_vector[idx].real();
             (x_modes[idx])[1] = coeff * mX_vector[idx].imag();
             (y_modes[idx])[0] = coeff * mY_vector[idx].real();
@@ -537,75 +537,75 @@ void modes_hosgrid::nwt_additional_coefficients(
     const double pi_xlen_add = M_PI / xlen_add;
     // lines 692-696
     const double pi_ylen = (n0 == 1) ? 0.0 : M_PI / nd_ylen;
-        for (int iy = 0; iy < n0; ++iy) {
-            // line 699, fortran index conversion
-            const double ky = pi_ylen * iy;
+    for (int iy = 0; iy < n0; ++iy) {
+        // line 699, fortran index conversion
+        const double ky = pi_ylen * iy;
 
-            // Start modes at 0 to accumulate
-            x_modes[iy] = 0.;
-            y_modes[iy] = 0.;
-            z_modes[iy] = 0.;
+        // Start modes at 0 to accumulate
+        x_modes[iy] = 0.;
+        y_modes[iy] = 0.;
+        z_modes[iy] = 0.;
 
-            for (int ia = 0; ia < n_add; ++ia) {
+        for (int ia = 0; ia < n_add; ++ia) {
 
-                // Grid2Grid hosNWT.inc
-                // line 777, fortran index conversion
-                const double kx_add = (2. * ia + 1.) * pi_xlen_add;
-                // line 1045
-                const double kxy_add = sqrt(kx_add * kx_add + ky * ky);
-                // line 1038, 1018
-                const double coskx_add = cos(kx_add * (nd_z + 1.));
-                // line 1039
-                const double sinkx_add = sin(kx_add * (nd_z + 1.));
-                // line 801
-                const double k_add_x1 = kxy_add * nd_x;
-                // line 805, 793
-                const double k_add_x2 = (2. * kxy_add) * (nd_xlen - nd_x);
+            // Grid2Grid hosNWT.inc
+            // line 777, fortran index conversion
+            const double kx_add = (2. * ia + 1.) * pi_xlen_add;
+            // line 1045
+            const double kxy_add = sqrt(kx_add * kx_add + ky * ky);
+            // line 1038, 1018
+            const double coskx_add = cos(kx_add * (nd_z + 1.));
+            // line 1039
+            const double sinkx_add = sin(kx_add * (nd_z + 1.));
+            // line 801
+            const double k_add_x1 = kxy_add * nd_x;
+            // line 805, 793
+            const double k_add_x2 = (2. * kxy_add) * (nd_xlen - nd_x);
 
-                // lines 796-797
-                double expon3 = 0.;
-                if (2. * kxy_add * nd_xlen <= k_add_x_max) {
-                    expon3 = exp(-2. * kxy_add * nd_xlen);
-                }
-                // lines 802-803
-                double expon1 = 0.;
-                if (k_add_x1 <= k_add_x_max) {
-                    expon1 = exp(-k_add_x1) / (expon3 + 1.);
-                }
-                // lines 806-807
-                double expon2 = 0.;
-                if (k_add_x2 <= k_add_x_max) {
-                    expon2 = exp(-k_add_x2);
-                }
-                // lines 809-810
-                double expon12 = 0.;
-                if ((k_add_x1 + k_add_x2) <= k_add_x_max) {
-                    expon12 = expon1 * expon2;
-                }
-
-                // lines 812-813
-                const double csh_add = expon1 + expon12;
-                const double sh_add = expon1 - expon12;
-
-                // line 818
-                const double kx_add_csh_add_x = csh_add * kx_add;
-                // line 816
-                const double k_add_sh_add_x = sh_add * kxy_add;
-                // line 817
-                const double kycsh_add_x = csh_add * ky;
-
-                // lines 1042-1044
-                const double coeff2 = sinkx_add * kx_add_csh_add_x;
-                const double coeff3 = coskx_add * k_add_sh_add_x;
-                const double coeff4 = coskx_add * kycsh_add_x;
-
-                const int idx = iy * n_add + ia;
-                // lines 1048-1053
-                x_modes[iy] -= add_modes_vec[idx] * coeff3;
-                y_modes[iy] -= add_modes_vec[idx] * coeff4;
-                z_modes[iy] -= add_modes_vec[idx] * coeff2;
+            // lines 796-797
+            double expon3 = 0.;
+            if (2. * kxy_add * nd_xlen <= k_add_x_max) {
+                expon3 = exp(-2. * kxy_add * nd_xlen);
             }
+            // lines 802-803
+            double expon1 = 0.;
+            if (k_add_x1 <= k_add_x_max) {
+                expon1 = exp(-k_add_x1) / (expon3 + 1.);
+            }
+            // lines 806-807
+            double expon2 = 0.;
+            if (k_add_x2 <= k_add_x_max) {
+                expon2 = exp(-k_add_x2);
+            }
+            // lines 809-810
+            double expon12 = 0.;
+            if ((k_add_x1 + k_add_x2) <= k_add_x_max) {
+                expon12 = expon1 * expon2;
+            }
+
+            // lines 812-813
+            const double csh_add = expon1 + expon12;
+            const double sh_add = expon1 - expon12;
+
+            // line 818
+            const double kx_add_csh_add_x = csh_add * kx_add;
+            // line 816
+            const double k_add_sh_add_x = sh_add * kxy_add;
+            // line 817
+            const double kycsh_add_x = csh_add * ky;
+
+            // lines 1042-1044
+            const double coeff2 = sinkx_add * kx_add_csh_add_x;
+            const double coeff3 = coskx_add * k_add_sh_add_x;
+            const double coeff4 = coskx_add * kycsh_add_x;
+
+            const int idx = iy * n_add + ia;
+            // lines 1048-1053
+            x_modes[iy] -= add_modes_vec[idx] * coeff3;
+            y_modes[iy] -= add_modes_vec[idx] * coeff4;
+            z_modes[iy] -= add_modes_vec[idx] * coeff2;
         }
+    }
 }
 
 void modes_hosgrid::populate_additional_hos_nwt_vel_nondim(
