@@ -378,11 +378,10 @@ void modes_hosgrid::ocean_velocity_modes(
     const double twoPi_xlen = 2.0 * M_PI / (xlen / dimL);
     const double twoPi_ylen = 2.0 * M_PI / (ylen / dimL);
     for (int j = 0; j < sy; ++j) {
-        // Preserve the legacy depth routine's first/second-dimension
-        // convention.
-        const double ky = (j <= sy / 2 ? j : j - sy) * twoPi_xlen;
+        // HOS-Ocean stores x along the compact (column) index and y along rows.
+        const double ky = (j <= sy / 2 ? j : j - sy) * twoPi_ylen;
         for (int i = 0; i <= sx / 2; ++i) {
-            const double kx = i * twoPi_ylen;
+            const double kx = i * twoPi_xlen;
             const double k = std::sqrt(ky * ky + kx * kx);
             const auto [a, b] = ocean_depth_factors(
                 k, nd_depth, nd_z, i == 0, i == 0 && j == 0);
@@ -390,6 +389,47 @@ void modes_hosgrid::ocean_velocity_modes(
             u[index] = a * mx[index] * (dimL / dimT);
             v[index] = a * my[index] * (dimL / dimT);
             w[index] = b * mz[index] * (dimL / dimT);
+        }
+    }
+}
+
+void modes_hosgrid::ocean_velocity_rate_modes(
+    int sy,
+    int sx,
+    double xlen,
+    double ylen,
+    double depth,
+    double dimL,
+    const std::vector<Complex>& mt,
+    std::vector<Complex>& mx_t,
+    std::vector<Complex>& my_t,
+    std::vector<Complex>& mz_t)
+{
+    if (sy < 1 || sx < 2)
+        throw std::invalid_argument(
+            "Waves2AMR: invalid compact velocity rate dimensions");
+    const auto count = checked_product(sy, sx / 2 + 1);
+    if (mt.size() != count || !(xlen > 0) || !(ylen > 0) || !(depth > 0) ||
+        !(dimL > 0))
+        throw std::invalid_argument(
+            "Waves2AMR: invalid compact velocity rate inputs");
+    mx_t.resize(count);
+    my_t.resize(count);
+    mz_t.resize(count);
+    const double nd_depth = depth / dimL;
+    const double twoPi_xlen = 2.0 * M_PI / (xlen / dimL);
+    const double twoPi_ylen = 2.0 * M_PI / (ylen / dimL);
+    const Complex imag(0., 1.);
+    // HOS-Ocean stores x along the compact (column) index and y along rows.
+    for (int j = 0; j < sy; ++j) {
+        const double ky = (j <= sy / 2 ? j : j - sy) * twoPi_ylen;
+        for (int i = 0; i <= sx / 2; ++i) {
+            const double kx = i * twoPi_xlen;
+            const double k = std::sqrt(kx * kx + ky * ky);
+            const auto index = j * (sx / 2 + 1) + i;
+            mx_t[index] = imag * kx * mt[index];
+            my_t[index] = imag * ky * mt[index];
+            mz_t[index] = k * std::tanh(k * nd_depth) * mt[index];
         }
     }
 }

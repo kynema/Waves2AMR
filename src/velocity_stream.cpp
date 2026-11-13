@@ -518,13 +518,15 @@ void interp_to_mfab::local_eta_to_levelset_field(
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& problo,
     const amrex::Vector<amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>>& dx,
     const LocalElevationReader& read,
-    Interpolation interpolation)
+    Interpolation interpolation,
+    bool add_level_offset)
 {
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(
         nx > 1 && ny >= 1 && sx > 0 && (ny == 1 || sy > 0) &&
             fields.size() == problo.size() && fields.size() == dx.size() &&
             static_cast<bool>(read),
         "Waves2AMR: invalid local elevation inputs");
+    const amrex::Real offset = add_level_offset ? 1. : 0.;
     for (auto* field : fields)
         AMREX_ALWAYS_ASSERT(field && field->nComp() >= 1);
     auto grid = local_grid(
@@ -552,7 +554,7 @@ void interp_to_mfab::local_eta_to_levelset_field(
                             periodic);
                         output(i, j, k) =
                             horizontal_value(values, x, y, width, xm, ym) +
-                            zsl - (plo[2] + (k + .5) * spacing[2]);
+                            offset * (zsl - (plo[2] + (k + .5) * spacing[2]));
                         return;
                     }
                     const auto s = stencil(
@@ -567,7 +569,8 @@ void interp_to_mfab::local_eta_to_levelset_field(
                             : linear_interp2D(
                                   a, b, c, d, s.x, s.y, s.x0, s.y0, s.x1, s.y1);
                     output(i, j, k) =
-                        height + zsl - (plo[2] + (k + .5) * spacing[2]);
+                        height +
+                        offset * (zsl - (plo[2] + (k + .5) * spacing[2]));
                 });
         }
     }

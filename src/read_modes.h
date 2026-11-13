@@ -49,14 +49,18 @@ public:
 
     // Direct reads own no coefficient storage or cache; callers may cache their
     // last successful timestep. A failed EOF read leaves destinations
-    // untouched.
+    // untouched. Time-derivative modes (dphi/dt, deta/dt and the NWT
+    // wavemaker rate) are parsed only when destinations are provided.
     bool read_into(
         int itime,
         std::vector<VT>& mX,
         std::vector<VT>& mY,
         std::vector<VT>& mZ,
         std::vector<VT>& mFS,
-        std::vector<VT>* mAdd = nullptr);
+        std::vector<VT>* mAdd = nullptr,
+        std::vector<VT>* mT = nullptr,
+        std::vector<VT>* mFST = nullptr,
+        std::vector<VT>* mAddT = nullptr);
 
     void print_file_constants();
 

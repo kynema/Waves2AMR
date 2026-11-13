@@ -71,5 +71,20 @@ void ocean_velocity_modes(
     std::vector<std::complex<double>>& v,
     std::vector<std::complex<double>>& w);
 
+// HOS-Ocean velocity modes are (i kx, i ky, k tanh(k h)) B for the potential
+// modes B at z = 0, and the dphi/dt modes are dB/dt. Return the nondimensional
+// time derivatives of the velocity modes for use with ocean_velocity_modes.
+void ocean_velocity_rate_modes(
+    int source_ny,
+    int source_nx,
+    double xlen,
+    double ylen,
+    double depth,
+    double dimL,
+    const std::vector<std::complex<double>>& mt,
+    std::vector<std::complex<double>>& mx_t,
+    std::vector<std::complex<double>>& my_t,
+    std::vector<std::complex<double>>& mz_t);
+
 } // namespace modes_hosgrid
 #endif

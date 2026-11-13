@@ -261,6 +261,37 @@ modes_hosgrid::NwtReconstruction::stats() const
     return impl->fft.stats();
 }
 
+void modes_hosgrid::nwt_velocity_rate_modes(
+    int sy,
+    int sx,
+    double xlen,
+    double ylen,
+    double dimL,
+    const std::vector<double>& mt,
+    std::vector<double>& mx_t,
+    std::vector<double>& my_t,
+    std::vector<double>& mz_t)
+{
+    const auto count = static_cast<std::size_t>(sy) * sx;
+    if (sy < 1 || sx < 2 || mt.size() != count || !(xlen > 0) ||
+        (sy != 1 && !(ylen > 0)) || !(dimL > 0))
+        throw std::invalid_argument(
+            "Waves2AMR: invalid NWT velocity rate inputs");
+    mx_t.resize(count);
+    my_t.resize(count);
+    mz_t.resize(count);
+    for (int j = 0; j < sy; ++j)
+        for (int i = 0; i < sx; ++i) {
+            const double kx = (M_PI / (xlen / dimL)) * i;
+            const double ky = sy == 1 ? 0. : (M_PI / (ylen / dimL)) * j;
+            const double k = std::sqrt(kx * kx + ky * ky);
+            const auto n = static_cast<std::size_t>(j) * sx + i;
+            mx_t[n] = -kx * mt[n];
+            my_t[n] = -ky * mt[n];
+            mz_t[n] = k * std::tanh(k) * mt[n];
+        }
+}
+
 std::pair<double, double> modes_hosgrid::nwt_depth_factors(
     double k, double z, bool first_column, bool zero_mode)
 {

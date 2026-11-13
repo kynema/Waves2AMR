@@ -344,19 +344,19 @@ void modes_hosgrid::populate_hos_ocean_vel_nondim(
     const double twoPi_xlen = 2.0 * M_PI / nd_xlen;
     const double twoPi_ylen = 2.0 * M_PI / nd_ylen;
     // Loop modes to modify them
-    for (int ix = 0; ix < n0; ++ix) {
-        for (int iy = 0; iy < n1 / 2 + 1; ++iy) {
+    // HOS-Ocean stores y along rows (n0) and x along the compact columns
+    for (int iy = 0; iy < n0; ++iy) {
+        for (int ix = 0; ix < n1 / 2 + 1; ++ix) {
 
             // Get wavenumbers
-            const double kxN2 =
-                (double)(ix < n0 / 2 + 1 ? ix : ix - n0) * twoPi_xlen;
-            const double ky = (double)iy * twoPi_ylen;
-            const double k = sqrt(kxN2 * kxN2 + ky * ky);
+            const double ky =
+                (double)(iy < n0 / 2 + 1 ? iy : iy - n0) * twoPi_ylen;
+            const double kx = (double)ix * twoPi_xlen;
+            const double k = sqrt(kx * kx + ky * ky);
             const auto [coeff, coeff2] = ocean_depth_factors(
-                k, nd_depth, nd_z, iy == 0, ix == 0 && iy == 0);
+                k, nd_depth, nd_z, ix == 0, ix == 0 && iy == 0);
             // Multiply modes by coefficients
-            // hosProcedure is velocity, I think
-            const int idx = ix * (n1 / 2 + 1) + iy;
+            const int idx = iy * (n1 / 2 + 1) + ix;
             (x_modes[idx])[0] = coeff * mX_vector[idx].real();
             (x_modes[idx])[1] = coeff * mX_vector[idx].imag();
             (y_modes[idx])[0] = coeff * mY_vector[idx].real();
